@@ -580,7 +580,7 @@ function MessageTimelineView(
                     fallback={
                       <h1
                         data-slot="session-title-child"
-                        class="truncate text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base w-fit rounded-[6px] px-2 py-1 hover:bg-v2-overlay-simple-overlay-hover"
+                        class="truncate text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base w-full min-w-0 flex-1 rounded-[6px] px-2 py-1 hover:bg-v2-overlay-simple-overlay-hover"
                         onClick={openTitleEditor}
                       >
                         {childTitle()}
@@ -595,7 +595,7 @@ function MessageTimelineView(
                       dir="auto"
                       value={title.draft}
                       disabled={props.pending.rename()}
-                      class="block text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base field-sizing-content self-start rounded-[6px] px-2 py-1"
+                      class="block text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base w-full min-w-0 flex-1 rounded-[6px] px-2 py-1"
                       style={{
                         "--inline-input-shadow": "none",
                         "text-align": "start",

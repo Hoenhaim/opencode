@@ -144,7 +144,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
   )
 
   const text = () => (
-    <span class="inline-flex w-[128px] justify-center text-12-medium tabular-nums text-v2-icon-icon-base">
+    <span class="inline-flex w-fit min-w-max whitespace-nowrap justify-center text-12-medium tabular-nums text-v2-icon-icon-base">
       {context()?.usage ?? 0}% / {cost()} / {tokens()}
     </span>
   )
@@ -183,7 +183,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
               <Button
                 type="button"
                 variant="ghost"
-                class="h-7 w-[128px] px-1"
+                class="h-7 w-fit min-w-max px-2"
                 onClick={openContext}
                 onContextMenu={toggleDisplay}
                 aria-label={language.t("context.usage.view")}
