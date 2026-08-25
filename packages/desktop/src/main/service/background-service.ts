@@ -23,7 +23,7 @@ export const layer = Layer.effect(
         initial: connect("initial").pipe(Effect.provide(context)),
         reconnect: connect("reconnect").pipe(Effect.provide(context), Effect.orDie),
       })),
-      stop,
+      stop: stop().pipe(Effect.provide(context), Effect.orDie),
     })
   }),
 )

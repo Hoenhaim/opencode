@@ -42,7 +42,6 @@ export const register = Effect.fn("ConfigMCPPlugin.register")(function* (
     draft.setGlobalCodemode(
       documents.findLast((entry) => entry.info.mcp?.codemode !== undefined)?.info.mcp?.codemode,
     )
-    const documents = loaded.entries.filter((entry): entry is Document => entry.type === "document")
     // Global timeout defaults merge in config order; each server can override them.
     const timeout = Object.assign(
       {},

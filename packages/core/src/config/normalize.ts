@@ -267,7 +267,7 @@ function normalizeMcp(input: Record<string, unknown>, encoded: Record<string, un
         }
         if (name === "codemode" && !isDirectLegacyMcp(value)) {
           const decoded = decodeEncoded(Schema.Boolean, value, path, diagnostics)
-          if (decoded !== undefined) codemode = decoded
+          if (typeof decoded === "boolean") codemode = decoded
           return
         }
         const server = decodeValue(ConfigMCPV1.Info, value, path, diagnostics)

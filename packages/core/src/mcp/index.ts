@@ -668,12 +668,12 @@ export const layer = (options?: Options) =>
           for (const [name, entry] of entries) {
             const connection = entry.client
             if (!connection) continue
-            yield* locks.withLock(name)(
-              Effect.suspend(() => {
-                if (entry.client !== connection) return Effect.void
-                return refreshTools(name, entry, connection)
-              }),
-            )
+              yield* locks.withLock(name)(
+                Effect.suspend(() => {
+                  if (entry.client !== connection) return Effect.void
+                  return refreshTools(name, entry, connection).pipe(Effect.ignore)
+                }),
+              )
             yield* bus.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore)
           }
         }
