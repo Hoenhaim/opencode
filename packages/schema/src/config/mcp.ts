@@ -15,6 +15,9 @@ export type Remote = Mcp.RemoteConfig
 export const Server = Mcp.ServerConfig
 
 export class Info extends Schema.Class<Info>("Config.MCP")({
+  codemode: Schema.Boolean.pipe(optional).annotate({
+    description: "Default Code Mode exposure for all MCP server tools. Defaults to true.",
+  }),
   timeout: Timeout.pipe(optional),
   servers: Schema.Record(Schema.String, Server).pipe(optional),
 }) {}

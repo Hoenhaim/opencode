@@ -60,7 +60,13 @@ type ResourceTemplatePage = {
 }
 
 function resourceServer(
-  input: { resources?: boolean; listChanged?: boolean; emptyElicitation?: boolean; urlElicitation?: boolean } = {},
+  input: {
+    resources?: boolean
+    listChanged?: boolean
+    emptyElicitation?: boolean
+    urlElicitation?: boolean
+    tools?: Array<{ name: string; inputSchema?: Record<string, unknown> }>
+  } = {},
 ) {
   return Effect.acquireRelease(
     Effect.promise(async () => {
@@ -90,11 +96,11 @@ function resourceServer(
       protocol.setRequestHandler(ListToolsRequestSchema, () => {
         state.toolLists += 1
         return Promise.resolve({
-          tools: input.emptyElicitation
-            ? [{ name: "empty-elicitation", inputSchema: { type: "object" as const, properties: {} } }]
-            : input.urlElicitation
-              ? [{ name: "url-elicitation", inputSchema: { type: "object" as const, properties: {} } }]
-              : [],
+            tools: input.emptyElicitation
+              ? [{ name: "empty-elicitation", inputSchema: { type: "object" as const, properties: {} } }]
+              : input.urlElicitation
+                ? [{ name: "url-elicitation", inputSchema: { type: "object" as const, properties: {} } }]
+                : (input.tools ?? []),
         })
       })
       if (input.emptyElicitation) {
@@ -1142,6 +1148,136 @@ test("reconciles only changed MCP server config", async () => {
               entries: () => Effect.sync(() => entries),
               subscribe: (() => Stream.fromPubSub(updates)) as Bus.Interface["subscribe"],
             }),
+          ),
+        )
+      }),
+    ),
+  )
+})
+
+test("applies mcp.codemode as a global default that per-server settings override", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const plain = yield* resourceServer({
+          tools: [{ name: "search", inputSchema: { type: "object", properties: {} } }],
+        })
+        const trusted = yield* resourceServer({
+          tools: [{ name: "search", inputSchema: { type: "object", properties: {} } }],
+        })
+        const entries = [
+          new Document({
+            type: "document",
+            info: new Info({
+              mcp: new ConfigMCP.Info({
+                codemode: false,
+                servers: {
+                  demo: new ConfigMCP.Remote({ type: "remote", url: plain.url, oauth: false }),
+                  trusted: new ConfigMCP.Remote({
+                    type: "remote",
+                    url: trusted.url,
+                    oauth: false,
+                    codemode: true,
+                  }),
+                },
+              }),
+            }),
+          }),
+        ]
+        yield* Effect.gen(function* () {
+          const service = yield* MCP.Service
+          const tools = yield* service.tools()
+          expect(tools.map((tool) => [String(tool.server), tool.codemode])).toEqual([
+            [String(MCP.ServerName.make("demo")), false],
+            [String(MCP.ServerName.make("trusted")), true],
+          ])
+        }).pipe(
+          Effect.provide(
+            resourceMcpLayer(
+              new ConfigMCP.Remote({ type: "remote", url: plain.url, oauth: false }),
+              undefined,
+              undefined,
+              { entries: () => Effect.sync(() => entries) },
+            ),
+          ),
+        )
+      }),
+    ),
+  )
+})
+
+test("reloads the global codemode toggle without reconnecting", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const server = yield* resourceServer({
+          tools: [{ name: "search", inputSchema: { type: "object", properties: {} } }],
+        })
+        const updates = yield* PubSub.unbounded<Payload>()
+        const demo = () => new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false })
+        const document = (global?: boolean) =>
+          new Document({
+            type: "document",
+            info: new Info({
+              mcp: new ConfigMCP.Info({
+                codemode: global,
+                servers: { demo: demo() },
+              }),
+            }),
+          })
+        let entries = [document()]
+        const publishUpdate = () =>
+          PubSub.publish(updates, {
+            id: ID.create(),
+            created: 0,
+            type: Event.Updated.type,
+            data: {},
+          } satisfies Payload<typeof Event.Updated>)
+
+        yield* Effect.gen(function* () {
+          const service = yield* MCP.Service
+          const initial = yield* service.tools()
+          expect(initial[0]?.codemode).toBeUndefined()
+          expect(server.state.initializations).toBe(1)
+          expect(server.state.toolLists).toBe(1)
+
+          // The global toggle alone must not restart the server.
+          entries = [document(false)]
+          yield* publishUpdate()
+          const direct = yield* service.tools().pipe(
+            Effect.filterOrFail(
+              (items) => items.some((tool) => tool.codemode === false),
+              () => new Error("global codemode change was not applied"),
+            ),
+            Effect.retry({ times: 100, schedule: Schedule.spaced("10 millis") }),
+          )
+          expect(direct[0]?.codemode).toBe(false)
+          expect(server.state.initializations).toBe(1)
+          // Tools were re-derived from the live connection rather than by reconnecting.
+          expect(server.state.toolLists).toBe(2)
+
+          entries = [document(undefined)]
+          yield* publishUpdate()
+          yield* Effect.sync(() => server.state.toolLists).pipe(
+            Effect.filterOrFail(
+              (count) => count === 3,
+              () => new Error("global codemode restore did not re-derive tools"),
+            ),
+            Effect.retry({ times: 100, schedule: Schedule.spaced("10 millis") }),
+          )
+          expect(server.state.initializations).toBe(1)
+          expect((yield* service.tools())[0]?.codemode).not.toBe(false)
+        }).pipe(
+          Effect.provide(
+            resourceMcpLayer(
+              new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false }),
+              undefined,
+              undefined,
+              {
+                entries: () => Effect.sync(() => entries),
+                subscribe: (() => Stream.fromPubSub(updates)) as Bus.Interface["subscribe"],
+              },
+            ),
           ),
         )
       }),

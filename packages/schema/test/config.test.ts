@@ -52,6 +52,19 @@ describe("Config.Entry", () => {
     expect(Config.Entry.ast.annotations?.identifier).toBe("Config.Entry")
   })
 
+  test("preserves the global mcp.codemode toggle while encoding", () => {
+    const entry = new Config.Document({
+      type: "document",
+      path: undefined,
+      info: new Config.Info({
+        mcp: new ConfigMCP.Info({ codemode: false }),
+      }),
+    })
+    const encoded = Schema.encodeSync(Config.Entry)(entry)
+    if (encoded.type !== "document") throw new Error("Expected a config document")
+    expect(encoded.info.mcp?.codemode).toBe(false)
+  })
+
   test("omits undefined optional properties while encoding", () => {
     const entry = new Config.Document({
       type: "document",
@@ -60,6 +73,7 @@ describe("Config.Entry", () => {
         default_agent: undefined,
         agents: { reviewer: new ConfigAgent.Info({ description: undefined }) },
         mcp: new ConfigMCP.Info({
+          codemode: undefined,
           timeout: undefined,
           servers: {
             docs: new Mcp.RemoteConfig({
@@ -79,6 +93,7 @@ describe("Config.Entry", () => {
     expect(encoded).not.toHaveProperty("path")
     expect(encoded.info).not.toHaveProperty("default_agent")
     expect(encoded.info.agents?.reviewer).not.toHaveProperty("description")
+    expect(encoded.info.mcp).not.toHaveProperty("codemode")
     expect(encoded.info.mcp).not.toHaveProperty("timeout")
     const docs = encoded.info.mcp?.servers?.docs
     if (docs?.type !== "remote" || docs.oauth === false) throw new Error("Expected a remote MCP server")

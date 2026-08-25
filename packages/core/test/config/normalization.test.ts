@@ -362,6 +362,40 @@ describe("ConfigNormalize", () => {
     ])
   })
 
+  test("preserves the global mcp.codemode toggle", () => {
+    const result = normalized({
+      mcp: {
+        codemode: false,
+        figma: { type: "remote", url: "http://127.0.0.1:3845/mcp" },
+      },
+    })
+    expect(result.encoded.mcp).toMatchObject({
+      codemode: false,
+      servers: {
+        figma: { type: "remote", url: "http://127.0.0.1:3845/mcp" },
+      },
+    })
+    expect(result.diagnostics).toEqual([])
+  })
+
+  test("rejects a non-boolean mcp.codemode value", () => {
+    const result = normalized({ mcp: { codemode: "false" } })
+    expect(result.encoded.mcp).toBeUndefined()
+    expect(result.diagnostics.map((item) => [item.kind, item.path])).toEqual([["invalid", ["mcp", "codemode"]]])
+  })
+
+  test("treats a typed mcp.codemode entry as a reserved server name", () => {
+    const result = normalized({
+      mcp: {
+        codemode: { type: "local", command: ["codemode-server"] },
+      },
+    })
+    expect((result.encoded.mcp as { servers: Record<string, unknown> }).servers.codemode).toMatchObject({
+      type: "local",
+      command: ["codemode-server"],
+    })
+  })
+
   test("merges bounded compaction leaves and omits unsupported leaves", () => {
     const result = normalized({
       compaction: {

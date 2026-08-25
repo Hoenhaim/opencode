@@ -233,6 +233,7 @@ function normalizeMcp(input: Record<string, unknown>, encoded: Record<string, un
   const legacyServers: Record<string, unknown> = {}
   const nativeServers: Record<string, unknown> = {}
   const timeout: Record<string, unknown> = {}
+  let codemode: boolean | undefined
   if (isRecord(input.experimental) && own(input.experimental, "mcp_timeout")) {
     const value = decodeEncoded(
       PositiveInt,
@@ -264,6 +265,11 @@ function normalizeMcp(input: Record<string, unknown>, encoded: Record<string, un
           normalizeMcpTimeout(value, timeout, path, diagnostics)
           return
         }
+        if (name === "codemode" && !isDirectLegacyMcp(value)) {
+          const decoded = decodeEncoded(Schema.Boolean, value, path, diagnostics)
+          if (decoded !== undefined) codemode = decoded
+          return
+        }
         const server = decodeValue(ConfigMCPV1.Info, value, path, diagnostics)
         if (server !== undefined)
           setOwn(legacyServers, name, canonical(ConfigMCP.Server, ConfigMigrateV1.migrateMcp(server)))
@@ -271,11 +277,12 @@ function normalizeMcp(input: Record<string, unknown>, encoded: Record<string, un
     }
   }
   const servers = mergeMaps(legacyServers, nativeServers, ["mcp", "servers"], diagnostics)
-  if (!Object.keys(servers).length && !Object.keys(timeout).length) {
+  if (!Object.keys(servers).length && !Object.keys(timeout).length && codemode === undefined) {
     if (isRecord(input.mcp) && !Object.keys(input.mcp).length) encoded.mcp = {}
     return
   }
   encoded.mcp = {
+    ...(codemode !== undefined ? { codemode } : {}),
     ...(Object.keys(timeout).length ? { timeout } : {}),
     ...(Object.keys(servers).length ? { servers } : {}),
   }

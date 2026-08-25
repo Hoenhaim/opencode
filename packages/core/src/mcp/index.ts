@@ -130,6 +130,7 @@ const URL_ELICITATION_FIELD_KEY = "elicitation"
 type Data = {
   servers: Map<ServerName, Types.DeepMutable<Mcp.ServerConfig>>
   removed: Set<ServerName>
+  codemode?: boolean
 }
 
 export type Draft = {
@@ -138,6 +139,8 @@ export type Draft = {
   set: (server: ServerName | string, config: Mcp.ServerConfig) => void
   update: (server: ServerName | string, update: (config: Types.DeepMutable<Mcp.ServerConfig>) => void) => void
   remove: (server: ServerName | string) => void
+  codemode: () => boolean | undefined
+  setGlobalCodemode: (value: boolean | undefined) => void
 }
 
 const cloneConfig = (config: Mcp.ServerConfig) =>
@@ -402,7 +405,7 @@ export const layer = (options?: Options) =>
         new Tool({
           server,
           name: def.name,
-          codemode: entry.config.codemode,
+          codemode: entry.config.codemode ?? codemodeState.current,
           description: def.description,
           inputSchema: def.inputSchema,
           outputSchema: def.outputSchema,
@@ -615,8 +618,13 @@ export const layer = (options?: Options) =>
       })
 
       let applied: Map<ServerName, Mcp.ServerConfig> | undefined
+      // Global Code Mode exposure default from config; a server's own codemode setting overrides it.
+      const codemodeState = { current: undefined as boolean | undefined, applied: undefined as boolean | undefined }
       const overrides = new Map<ServerName, Mcp.ServerConfig | false>()
       const reconcile = Effect.fnUntraced(function* (next: Draft) {
+        codemodeState.current = next.codemode()
+        const previousCodemode = codemodeState.applied
+        codemodeState.applied = codemodeState.current
         const servers = new Map(next.list())
         if (!applied && entries.size === 0) {
           for (const [name, server] of servers) {
@@ -654,6 +662,21 @@ export const layer = (options?: Options) =>
           yield* replaceServer(name, updated).pipe(locks.withLock(name))
         }
         applied = servers
+        if (previousCodemode !== codemodeState.applied) {
+          // Re-derive tool entries from live connections so registrations move to or from Code Mode
+          // when only the global default changed, without reconnecting the servers.
+          for (const [name, entry] of entries) {
+            const connection = entry.client
+            if (!connection) continue
+            yield* locks.withLock(name)(
+              Effect.suspend(() => {
+                if (entry.client !== connection) return Effect.void
+                return refreshTools(name, entry, connection)
+              }),
+            )
+            yield* bus.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore)
+          }
+        }
       })
 
       // Bring a server online (or back to needs_auth) when its integration's credential changes, so an
@@ -705,6 +728,10 @@ export const layer = (options?: Options) =>
             update(current)
           },
           remove: (server) => draft.servers.delete(ServerName.make(server)),
+          codemode: () => draft.codemode,
+          setGlobalCodemode: (value) => {
+            draft.codemode = value
+          },
         }),
         finalize: reconcile,
       })
