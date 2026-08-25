@@ -471,7 +471,7 @@ function ChannelIndicator(props: { debugTools?: { visible: boolean; toggle: () =
     )
   }
 
-  const label = channel && ["local", "beta", "dev"].includes(channel) ? channel.toUpperCase() : undefined
+  const label = channel && ["local", "beta"].includes(channel) ? channel.toUpperCase() : undefined
   return (
     <Show when={label}>
       {(value) => (
