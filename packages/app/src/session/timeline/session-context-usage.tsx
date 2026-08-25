@@ -1,6 +1,8 @@
 import { Show, createMemo, type ComponentProps, type JSX } from "solid-js"
+import { createStore } from "solid-js/store"
 import { ProgressCircle } from "@opencode-ai/ui/progress-circle"
 import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Button } from "@opencode-ai/ui/button"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { createMediaQuery } from "@solid-primitives/media"
 
@@ -80,6 +82,14 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
       usage: model?.limit.context ? Math.round((total / model.limit.context) * 100) : null,
     }
   })
+  const [display, setDisplay] = createStore({ mode: "circle" as "circle" | "text" })
+  const tokens = createMemo(() =>
+    new Intl.NumberFormat(language.intl(), {
+      notation: "compact",
+      compactDisplay: "short",
+      maximumFractionDigits: 1,
+    }).format(context()?.total ?? 0),
+  )
   const cost = createMemo(() => {
     return usd().format(info()?.cost ?? 0)
   })
@@ -107,6 +117,11 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
     })
   }
 
+  const toggleDisplay = (event: MouseEvent) => {
+    event.preventDefault()
+    setDisplay("mode", (mode) => (mode === "circle" ? "text" : "circle"))
+  }
+
   const circle = () => (
     <div class="flex items-center justify-center">
       <ProgressCircle
@@ -128,6 +143,12 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
     </div>
   )
 
+  const text = () => (
+    <span class="inline-flex w-[128px] justify-center text-12-medium tabular-nums text-v2-icon-icon-base">
+      {context()?.usage ?? 0}% / {cost()} / {tokens()}
+    </span>
+  )
+
   const tooltipValue = () => (
     <div class="flex w-[120px] flex-col gap-2">
       <ContextTooltipRow name={language.t("context.usage.cost")} value={cost()} />
@@ -145,14 +166,31 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
         <Show
           when={variant() === "indicator"}
           fallback={
-            <IconButton
-              type="button"
-              variant="ghost-muted"
-              size="large"
-              icon={compactCircle()}
-              onClick={openContext}
-              aria-label={language.t("context.usage.view")}
-            />
+            <Show
+              when={display.mode === "text"}
+              fallback={
+                <IconButton
+                  type="button"
+                  variant="ghost-muted"
+                  size="large"
+                  icon={compactCircle()}
+                  onClick={openContext}
+                  onContextMenu={toggleDisplay}
+                  aria-label={language.t("context.usage.view")}
+                />
+              }
+            >
+              <Button
+                type="button"
+                variant="ghost"
+                class="h-7 w-[128px] px-1"
+                onClick={openContext}
+                onContextMenu={toggleDisplay}
+                aria-label={language.t("context.usage.view")}
+              >
+                {text()}
+              </Button>
+            </Show>
           }
         >
           {circle()}
