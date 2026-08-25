@@ -38,6 +38,7 @@ export interface Settings {
     shellToolPartsExpanded: boolean
     editToolPartsExpanded: boolean
     showCustomAgents: boolean
+    contextUsageMode: "circle" | "text"
     mobileTitlebarPosition: "top" | "bottom"
     terminalPlacement: TerminalPlacement
     followUpBehavior: FollowUpBehavior
@@ -126,6 +127,7 @@ const defaultSettings: Settings = {
     shellToolPartsExpanded: true,
     editToolPartsExpanded: false,
     showCustomAgents: true,
+    contextUsageMode: "circle",
     mobileTitlebarPosition: "top",
     terminalPlacement: "side",
     followUpBehavior: "steer",
@@ -175,6 +177,7 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
       () => store.general?.showCustomAgents,
       defaultSettings.general.showCustomAgents,
     )
+    const contextUsageMode = withFallback(() => store.general?.contextUsageMode, defaultSettings.general.contextUsageMode)
     createEffect(() => {
       if (typeof document === "undefined") return
       const root = document.documentElement
@@ -244,6 +247,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         showCustomAgents,
         setShowCustomAgents(value: boolean) {
           setStore("general", "showCustomAgents", value)
+        },
+        contextUsageMode,
+        setContextUsageMode(value: "circle" | "text") {
+          setStore("general", "contextUsageMode", value)
         },
         mobileTitlebarPosition: withFallback(
           () => store.general?.mobileTitlebarPosition,

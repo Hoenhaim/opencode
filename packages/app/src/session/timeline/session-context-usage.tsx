@@ -1,5 +1,4 @@
 import { Show, createMemo, type ComponentProps, type JSX } from "solid-js"
-import { createStore } from "solid-js/store"
 import { ProgressCircle } from "@opencode-ai/ui/progress-circle"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Button } from "@opencode-ai/ui/button"
@@ -14,6 +13,7 @@ import { useProviders } from "@/providers/catalog/providers"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useSessionLayout } from "@/session/session-layout"
 import { createSessionTabs } from "@/session/helpers"
+import { useSettings } from "@/settings/model"
 
 interface SessionContextUsageProps {
   variant?: "button" | "indicator"
@@ -44,6 +44,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
   const file = useFile()
   const layout = useLayout()
   const language = useLanguage()
+  const settings = useSettings()
   const sdk = useWorkspaceLocation()
   const providers = useProviders(() => sdk().directory)
   const { params, tabs, view } = useSessionLayout()
@@ -82,7 +83,6 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
       usage: model?.limit.context ? Math.round((total / model.limit.context) * 100) : null,
     }
   })
-  const [display, setDisplay] = createStore({ mode: "circle" as "circle" | "text" })
   const tokens = createMemo(() =>
     new Intl.NumberFormat(language.intl(), {
       notation: "compact",
@@ -119,7 +119,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
 
   const toggleDisplay = (event: MouseEvent) => {
     event.preventDefault()
-    setDisplay("mode", (mode) => (mode === "circle" ? "text" : "circle"))
+    settings.general.setContextUsageMode(settings.general.contextUsageMode() === "circle" ? "text" : "circle")
   }
 
   const circle = () => (
@@ -167,7 +167,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
           when={variant() === "indicator"}
           fallback={
             <Show
-              when={display.mode === "text"}
+              when={settings.general.contextUsageMode() === "text"}
               fallback={
                 <IconButton
                   type="button"
