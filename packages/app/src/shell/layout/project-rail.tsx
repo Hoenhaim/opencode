@@ -148,6 +148,18 @@ export function ProjectRail() {
               aria-label={language.t("sidebar.help")}
             />
           </Tooltip>
+          <Show when={platform.platform === "desktop"}>
+            <Tooltip placement={tooltipPlacement()} value={language.t("sidebar.quit")}>
+              <IconButton
+                type="button"
+                variant="ghost-muted"
+                size="large"
+                icon={<Icon name="power" />}
+                onClick={() => void platform.quitApp?.()}
+                aria-label={language.t("sidebar.quit")}
+              />
+            </Tooltip>
+          </Show>
         </div>
       </aside>
     </Show>

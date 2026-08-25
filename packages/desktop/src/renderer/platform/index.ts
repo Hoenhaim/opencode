@@ -35,6 +35,7 @@ export function createDesktopPlatform(
     setForceFocus: (enabled) => api.setForceFocus(enabled),
     recordFatalRendererError: (error) => api.recordFatalRendererError(error),
     restart: async () => api.relaunch(),
+    quitApp: async () => api.quitApp(),
     notify: createDesktopNotify(api),
     fetch: (input, init) => {
       if (input instanceof Request) return fetch(input)

@@ -9,6 +9,7 @@ export * as BackgroundService from "./background-service"
 export interface Interface {
   readonly connection: Effect.Effect<ServerReadyData>
   readonly reconnect: Effect.Effect<ServerReadyData>
+  readonly stop: Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("opencode/desktop/BackgroundService") {}
@@ -17,31 +18,29 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const context = yield* Effect.context<FileSystem.FileSystem | Path.Path | DesktopCli.Service>()
-    return Service.of(
-      yield* BackgroundServiceState.make({
+    return Service.of({
+      ...(yield* BackgroundServiceState.make({
         initial: connect("initial").pipe(Effect.provide(context)),
         reconnect: connect("reconnect").pipe(Effect.provide(context), Effect.orDie),
-      }),
-    )
+      })),
+      stop,
+    })
   }),
 )
 
 const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial" | "reconnect") {
   yield* Effect.logInfo("starting v2 background service")
-  const path = yield* Path.Path
   const desktopCli = yield* DesktopCli.Service
   const runFork = Effect.runForkWith(yield* Effect.context())
   const isolated = !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
   const cli = yield* desktopCli.resolve
   const version = mode === "initial" ? cli.version : undefined
   if (isolated) process.env.XDG_STATE_HOME = app.getPath("userData")
+  const file = yield* serviceFile(isolated)
   const client = yield* Effect.promise(() => import("@opencode-ai/client/service"))
   const service = yield* Effect.tryPromise(() =>
     client.Service.ensure({
-      file:
-        isolated && process.env.OPENCODE_DESKTOP_SERVER_CHANNEL === "local"
-          ? path.join(app.getPath("userData"), "opencode", "service-local.json")
-          : undefined,
+      file,
       version,
       command: [...cli.command, "serve", "--service", ...(isolated ? ["--port", "0"] : [])],
       onStart: (reason, previousVersion) =>
@@ -62,6 +61,21 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
     username: service.auth.username,
     password: service.auth.password,
   } satisfies ServerReadyData
+})
+
+const serviceFile = Effect.fn("BackgroundService.serviceFile")(function* (isolated: boolean) {
+  if (!(isolated && process.env.OPENCODE_DESKTOP_SERVER_CHANNEL === "local")) return undefined
+  const path = yield* Path.Path
+  return path.join(app.getPath("userData"), "opencode", "service-local.json")
+})
+
+const stop = Effect.fn("BackgroundService.stop")(function* () {
+  yield* Effect.logInfo("stopping v2 background service")
+  const isolated = !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
+  if (isolated) process.env.XDG_STATE_HOME = app.getPath("userData")
+  const file = yield* serviceFile(isolated)
+  const client = yield* Effect.promise(() => import("@opencode-ai/client/service"))
+  yield* Effect.tryPromise(() => client.Service.stop({ file }))
 })
 
 function endpoint(url: string | undefined) {

@@ -1,4 +1,4 @@
-import { BrowserWindow } from "electron"
+import { app, BrowserWindow } from "electron"
 import { parseDesktopNativeBundle } from "@opencode-ai/app/i18n/desktop-native"
 import { Effect } from "effect"
 import { AppRpcs } from "../../shared/ipc-rpc"
@@ -16,7 +16,7 @@ import { BackgroundService } from "../service/background-service"
 import { DesktopCli } from "../service/desktop-cli"
 import { getDefaultServerUrl, setDefaultServerUrl } from "../service/server-settings"
 import { Updater } from "../updater"
-import { getLastFocusedWindow, setBackgroundColor } from "../windows"
+import { getLastFocusedWindow, setBackgroundColor, setAppQuitting } from "../windows"
 import { sender } from "./context"
 
 export const appHandlers = AppRpcs.toLayer(
@@ -67,6 +67,18 @@ export const appHandlers = AppRpcs.toLayer(
           })
         }),
       AppRelaunch: () => Effect.sync(lifecycle.relaunch),
+      AppQuitApp: () =>
+        Effect.sync(() => {
+          setAppQuitting()
+          runFork(
+            background.stop.pipe(
+              Effect.ignore,
+              Effect.andThen(lifecycle.prepareToRestart),
+              Effect.ensuring(Effect.sync(() => app.quit())),
+            ),
+          )
+        }),
+      AppKillSidecar: () => background.stop,
     })
   }),
 )

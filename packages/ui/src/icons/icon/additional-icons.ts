@@ -108,6 +108,7 @@ export const additionalIcons = {
   cube: `<path d="M10 2.5L16.5 6.25V13.75L10 17.5L3.5 13.75V6.25L10 2.5Z" stroke="currentColor"/><path d="M10 10L16.5 6.25M10 10V17.5M10 10L3.5 6.25" stroke="currentColor"/>`,
   "post-skill": `<rect x="2.5" y="3.5" width="15" height="13" rx="1.5" stroke="currentColor"/><path d="M5.5 7.5H10.5M5.5 10.5H14.5" stroke="currentColor"/>`,
   "arrow-undo-down": `<path d="M4.08333 11.0859L1.75 8.7526L4.08333 6.41927M2.33333 8.7526L12.5417 8.7526L12.5417 3.21094L7 3.21094" stroke="currentColor" stroke-width="1" stroke-linecap="square"/>`,
+  power: `<path d="M9.375 3.125V10.625" stroke="currentColor" stroke-linecap="round"/><path d="M6.25 5C4.125 6.375 3.125 8.625 3.125 11C3.125 14.75 6.25 17.875 10 17.875C13.75 17.875 16.875 14.75 16.875 11C16.875 8.625 15.875 6.375 13.75 5" stroke="currentColor" stroke-linecap="round"/>`,
 }
 
 export function additionalIconViewBox(name: keyof typeof additionalIcons) {

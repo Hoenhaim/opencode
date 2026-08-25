@@ -55,6 +55,8 @@ export const AppSetNativeTranslations = Rpc.make("AppSetNativeTranslations", {
   payload: { value: Schema.Unknown },
 })
 export const AppRelaunch = Rpc.make("AppRelaunch")
+export const AppQuitApp = Rpc.make("AppQuitApp")
+export const AppKillSidecar = Rpc.make("AppKillSidecar")
 export const AppRpcs = RpcGroup.make(
   AppAwaitInitialization,
   AppReconnectService,
@@ -71,4 +73,6 @@ export const AppRpcs = RpcGroup.make(
   AppRecordFatalRendererError,
   AppSetNativeTranslations,
   AppRelaunch,
+  AppQuitApp,
+  AppKillSidecar,
 )

@@ -836,6 +836,7 @@ export const dict = {
   "sidebar.nav.projectsAndSessions": "Projects and sessions",
   "sidebar.settings": "Settings",
   "sidebar.help": "Help",
+  "sidebar.quit": "Quit app and stop CLI",
   "sidebar.workspaces.enable": "Enable workspaces",
   "sidebar.workspaces.disable": "Disable workspaces",
   "sidebar.gettingStarted.title": "Getting started",
