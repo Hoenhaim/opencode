@@ -4,6 +4,7 @@ import { Titlebar, type TitlebarUpdate } from "@/shell/titlebar/titlebar"
 import { usePlatform } from "@/runtime/platform/platform"
 import { ToastRegion } from "@/shell/notifications/toast"
 import { TitlebarRightProvider } from "@/shell/titlebar/right-slot"
+import { ProjectRail } from "@/shell/layout/project-rail"
 
 const DebugBar = lazy(() => import("@/shell/debug/debug-bar").then((module) => ({ default: module.DebugBar })))
 
@@ -40,8 +41,11 @@ export default function Layout(props: ParentProps) {
               : undefined
           }
         />
-        <main class="flex-1 min-h-0 min-w-0 overflow-x-hidden flex flex-col items-start contain-strict">
-          <Suspense>{props.children}</Suspense>
+        <main class="flex-1 min-h-0 min-w-0 overflow-x-hidden flex items-start contain-strict">
+          <ProjectRail />
+          <div class="flex min-h-0 min-w-0 flex-1 self-stretch flex-col items-start">
+            <Suspense>{props.children}</Suspense>
+          </div>
         </main>
         <Show when={import.meta.env.DEV && state.debugTools}>
           <Suspense>

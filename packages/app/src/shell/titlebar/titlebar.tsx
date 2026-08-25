@@ -286,6 +286,15 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
               },
             ])
 
+            command.register("project-rail", () => [
+              {
+                id: "sidebar.toggle",
+                title: language.t("command.sidebar.toggle"),
+                category: language.t("command.category.view"),
+                onSelect: layout.projectRail.toggle,
+              },
+            ])
+
             command.register("tabs", () => {
               const current = currentTab()
 
@@ -333,6 +342,30 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                 <ChannelIndicator debugTools={props.debugTools} />
                 <Show when={windows() || linux()}>
                   <WindowsAppMenu command={command} platform={platform} />
+                </Show>
+                <Show when={!mobile()}>
+                  <Tooltip
+                    placement="bottom"
+                    value={language.t("command.sidebar.toggle")}
+                    class="shrink-0"
+                  >
+                    <IconButton
+                      type="button"
+                      variant="ghost-muted"
+                      size="large"
+                      class="!w-9 shrink-0"
+                      icon={
+                        <Icon
+                          name="sidebar-right"
+                          style={{ transform: language.direction() === "rtl" ? "scaleX(-1)" : undefined }}
+                        />
+                      }
+                      state={layout.projectRail.opened() ? "pressed" : undefined}
+                      onClick={layout.projectRail.toggle}
+                      aria-label={language.t("command.sidebar.toggle")}
+                      aria-pressed={layout.projectRail.opened()}
+                    />
+                  </Tooltip>
                 </Show>
                 <Tooltip
                   placement="bottom"

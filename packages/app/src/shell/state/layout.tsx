@@ -236,6 +236,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           workspaces: {} as Record<string, boolean>,
           workspacesDefault: false,
         },
+        projectRail: {
+          opened: true,
+        },
         terminal: {
           height: DEFAULT_TERMINAL_HEIGHT,
           opened: false,
@@ -388,6 +391,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         selection: createMemo(() => store.home.selection),
         setSelection(selection: HomeProjectSelection) {
           setStore("home", "selection", reconcile(selection))
+        },
+      },
+      projectRail: {
+        opened: createMemo(() => store.projectRail?.opened ?? true),
+        toggle() {
+          setStore("projectRail", "opened", (opened) => !opened)
         },
       },
       terminal: {
