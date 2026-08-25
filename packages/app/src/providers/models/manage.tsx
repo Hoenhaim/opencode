@@ -41,11 +41,17 @@ export const DialogManageModels: Component = () => {
   const setModelVisibility = (item: ModelItem, checked: boolean) => {
     local.model.setVisibility({ modelID: item.id, providerID: item.provider.id }, checked)
   }
+  const sortModels = (a: ModelItem, b: ModelItem) => {
+    const aEnabled = local.model.visible({ modelID: a.id, providerID: a.provider.id })
+    const bEnabled = local.model.visible({ modelID: b.id, providerID: b.provider.id })
+    if (aEnabled !== bEnabled) return Number(bEnabled) - Number(aEnabled)
+    return a.name.localeCompare(b.name)
+  }
   const list = useFilteredList<ModelItem>({
     items: () => local.model.list(),
     key: (x) => `${x.provider.id}:${x.id}`,
     filterKeys: ["provider.name", "name", "id"],
-    sortBy: (a, b) => a.name.localeCompare(b.name),
+    sortBy: sortModels,
     groupBy: (x) => x.provider.id,
     sortGroupsBy: (a, b) => {
       const aRank = popularProviders.indexOf(a.category)
