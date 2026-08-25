@@ -12,9 +12,9 @@ describe("sessionPanelWidthMax", () => {
     expect(sessionPanelWidthMax({ available: 1700, split: false })).toBe(1700 - REVIEW_PANE_WIDTH_MIN)
   })
 
-  test("reserves a larger minimum for split diffs", () => {
+  test("reserves the same minimum for split diffs", () => {
     expect(sessionPanelWidthMax({ available: 1700, split: true })).toBe(1700 - REVIEW_PANE_WIDTH_MIN_SPLIT)
-    expect(REVIEW_PANE_WIDTH_MIN_SPLIT).toBeGreaterThan(REVIEW_PANE_WIDTH_MIN)
+    expect(REVIEW_PANE_WIDTH_MIN_SPLIT).toBe(REVIEW_PANE_WIDTH_MIN)
   })
 
   test("lets the chat panel take everything beyond the review pane minimum", () => {
