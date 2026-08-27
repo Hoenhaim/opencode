@@ -22,6 +22,7 @@ const reviewTabID = "session-side-panel-review-tab"
 const reviewTabPanelID = "session-side-panel-review-tabpanel"
 const fileBrowserTabPanelID = "session-side-panel-file-browser-tabpanel"
 import { SessionContextTab } from "@/session/files/session-context-tab"
+import { SessionPromptTab } from "@/session/files/session-prompt-tab"
 import { SortableTab } from "@/session/files/tab"
 import { OpenInAppButton } from "@/session/files/open-in-app-button"
 import { useCommand } from "@/shell/commands/command"
@@ -167,6 +168,7 @@ export function SessionSidePanel(props: {
     fileBrowser: () => true,
   })
   const contextOpen = tabState.contextOpen
+  const promptOpen = tabState.promptOpen
   const openFileOpen = tabState.openFileOpen
   const panelTabs = tabState.panelTabs
   const openedTabs = tabState.openedTabs
@@ -216,7 +218,7 @@ export function SessionSidePanel(props: {
   })
   const fileBrowserVisible = createMemo(() => {
     const active = activeTab()
-    return active !== "review" && active !== "context" && active !== "empty"
+    return active !== "review" && active !== "context" && active !== "prompt" && active !== "empty"
   })
   const openFileKeybind = createMemo(() => command.keybindParts("file.open"))
   const closeTabKeybind = createMemo(() => command.keybindParts("tab.close"))
@@ -343,6 +345,34 @@ export function SessionSidePanel(props: {
                               </div>
                             </Tabs.Trigger>
                           </Show>
+                          <Show when={promptOpen()}>
+                            <Tabs.Trigger
+                              value="prompt"
+                              onMiddleClick={() => tabs().close("prompt")}
+                              closeButton={
+                                <Tooltip
+                                  value={
+                                    <>
+                                      {language.t("common.closeTab")}
+                                      <Show when={closeTabKeybind().length > 0}>
+                                        <Keybind keys={closeTabKeybind()} variant="neutral" />
+                                      </Show>
+                                    </>
+                                  }
+                                  placement="bottom"
+                                  gutter={10}
+                                >
+                                  <Tabs.CloseButton
+                                    onClick={() => tabs().close("prompt")}
+                                    aria-label={language.t("common.closeTab")}
+                                  />
+                                </Tooltip>
+                              }
+                              hideCloseButton
+                            >
+                              {language.t("session.tab.prompt")}
+                            </Tabs.Trigger>
+                          </Show>
                           <For each={panelTabs()}>
                             {(tab) => (
                               <Show
@@ -451,6 +481,14 @@ export function SessionSidePanel(props: {
                         <Tabs.Content value="context" class="flex flex-col h-full overflow-hidden contain-strict">
                           <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
                             <SessionContextTab />
+                          </div>
+                        </Tabs.Content>
+                      </Show>
+
+                      <Show when={activeTab() === "prompt"}>
+                        <Tabs.Content value="prompt" class="flex flex-col h-full overflow-hidden contain-strict">
+                          <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
+                            <SessionPromptTab />
                           </div>
                         </Tabs.Content>
                       </Show>

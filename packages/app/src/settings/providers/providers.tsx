@@ -6,8 +6,10 @@ import { showToast } from "@/shell/notifications/toast"
 import { popularProviders, useProviders } from "@/providers/catalog/providers"
 import { useIntegrations } from "@/providers/catalog/integrations"
 import { createMemo, type Component, For, Show } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServerSDK } from "@/runtime/server/client"
+import { useData } from "@/runtime/server/current"
 import { DialogConnectProvider, useProviderConnectController } from "@/providers/connect/dialog"
 import { SettingsServerScope } from "@/settings/server-scope"
 import { InlineServerSelect } from "@/settings/server-select"
@@ -37,10 +39,33 @@ export const SettingsProviders: Component<{
   const dialog = useDialog()
   const language = useLanguage()
   const serverSdk = useServerSDK()
+  const data = useData()
   const providers = useProviders(() => props.directory)
   const integrations = useIntegrations(() => props.directory)
   const providerConnect = useProviderConnectController({ onBack: props.onBack })
   const integration = (providerID: string) => integrations.list().find((item) => item.id === providerID)
+
+  const [refresh, setRefresh] = createStore({ active: false })
+  const refreshModels = async () => {
+    if (refresh.active) return
+    setRefresh("active", true)
+    try {
+      await serverSdk.api.model.refresh()
+      data.location.provider.invalidate()
+      data.location.model.invalidate()
+      await Promise.all([data.location.provider.sync(), data.location.model.sync()])
+      showToast({
+        variant: "success",
+        icon: "circle-check",
+        title: language.t("settings.providers.models.refreshed"),
+      })
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err)
+      showToast({ title: language.t("common.requestFailed"), description: message })
+    } finally {
+      setRefresh("active", false)
+    }
+  }
 
   const connect = (provider?: string) => {
     providerConnect.select(provider)
@@ -133,7 +158,20 @@ export const SettingsProviders: Component<{
             <h2 class="settings-tab-title">{language.t("settings.providers.title")}</h2>
             <span class="text-11-regular text-v2-text-text-muted">{language.t("settings.providers.description")}</span>
           </div>
-          <InlineServerSelect />
+          <div class="flex items-center gap-2">
+            <Button
+              size="normal"
+              variant="ghost-muted"
+              icon="reset"
+              disabled={refresh.active}
+              onClick={() => void refreshModels()}
+            >
+              {refresh.active
+                ? language.t("dialog.model.refreshing")
+                : language.t("dialog.model.refresh")}
+            </Button>
+            <InlineServerSelect />
+          </div>
         </div>
       </div>
 

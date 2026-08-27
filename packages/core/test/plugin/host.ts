@@ -36,6 +36,7 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       model: {
         list: () => Effect.die("unused catalog.model.list"),
         default: () => Effect.die("unused catalog.model.default"),
+        refresh: () => Effect.die("unused catalog.model.refresh"),
       },
       transform: () => Effect.die("unused catalog.transform"),
       reload: () => Effect.die("unused catalog.reload"),
@@ -195,6 +196,20 @@ export function catalogHost(catalog: Catalog.Interface): Plugin.Context["catalog
           })),
         ),
       default: () => Effect.die("unused catalog.model.default"),
+      refresh: () =>
+        catalog.model.available().pipe(
+          Effect.map((data) => ({
+            location: new Location.Info({
+              directory: AbsolutePath.make("/"),
+              project: {
+                id: Project.ID.make("test"),
+                directory: AbsolutePath.make("/"),
+                canonical: AbsolutePath.make("/"),
+              },
+            }),
+            data: data.map(modelInfo),
+          })),
+        ),
     },
     reload: catalog.reload,
     transform: (callback) =>

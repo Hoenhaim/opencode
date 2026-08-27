@@ -151,6 +151,8 @@ export type SessionInboxSyntheticPayload = { text: string; description?: string;
 
 export type SessionInboxCompactionPayload = {}
 
+export type SessionInstructionSource = { path: string; content: string }
+
 export type InstructionEntryKey = string
 
 export type SessionGenerateResponse = { data: { text: string } }
@@ -501,6 +503,8 @@ export type SessionInboxCompaction = {
   payload: SessionInboxCompactionPayload
   delivery: SessionInboxDelivery
 }
+
+export type SessionSystemPromptResponse = { system: Array<string>; sources: Array<SessionInstructionSource> }
 
 export type InstructionEntryInfo = { key: InstructionEntryKey; value: JsonValue }
 
@@ -1797,6 +1801,7 @@ export type ConfigEntry =
         }
         tool_output?: { max_lines?: number; max_bytes?: number }
         mcp?: {
+          codemode?: boolean
           timeout?: { startup?: number; catalog?: number; execution?: number }
           servers?: {
             [x: string]:
@@ -3870,6 +3875,10 @@ export type SessionContextInput = { readonly sessionID: { readonly sessionID: st
 
 export type SessionContextOutput = { data: Array<SessionMessageInfo> }["data"]
 
+export type SessionSystemPromptInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
+
+export type SessionSystemPromptOutput = { data: SessionSystemPromptResponse }["data"]
+
 export type SessionInboxListInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
 
 export type SessionInboxListOutput = { data: Array<SessionInboxInfo> }["data"]
@@ -4002,6 +4011,17 @@ export type ModelDefaultInput = {
 export type ModelDefaultOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
   data: ModelInfo | null
+}
+
+export type ModelRefreshInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type ModelRefreshOutput = {
+  location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
+  data: Array<ModelInfo>
 }
 
 export type GenerateTextInput = {

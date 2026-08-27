@@ -5,4 +5,5 @@ const raw = import.meta.env.OPENCODE_CHANNEL
 export const CHANNEL: Channel = raw === "local" || raw === "dev" || raw === "beta" || raw === "prod" ? raw : "dev"
 export const VERSION = app.isPackaged ? app.getVersion() : (process.env.OPENCODE_VERSION ?? app.getVersion())
 
-export const UPDATER_ENABLED = app.isPackaged && CHANNEL !== "dev"
+export const UPDATES_ENABLED = false
+export const UPDATER_ENABLED = UPDATES_ENABLED && app.isPackaged

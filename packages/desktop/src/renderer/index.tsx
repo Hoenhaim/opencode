@@ -9,11 +9,10 @@ import { startDesktopMenu } from "./platform/menu"
 import { startDesktopUpdater } from "./platform/updater"
 import { startDeepLinks } from "./startup/deep-links"
 import { requireRendererRoot } from "./startup/root"
-import { desktopVersion, initializeSentry } from "./startup/sentry"
+import { desktopVersion } from "./startup/sentry"
 
 const root = requireRendererRoot()
 const version = desktopVersion()
-await initializeSentry(version)
 
 const updater = startDesktopUpdater(api)
 startDesktopMenu(api)

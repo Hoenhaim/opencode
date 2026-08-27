@@ -371,6 +371,16 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       keybind: "mod+shift+r",
       onSelect: () => actions.session.layout.view().reviewPanel.toggle(),
     }),
+    viewCommand({
+      id: "prompt.view",
+      title: language.t("command.view.prompt"),
+      onSelect: () => {
+        const layout = actions.session.layout
+        layout.view().reviewPanel.open()
+        const tabs = layout.tabs
+        void tabs().open("prompt").then(() => tabs().setActive("prompt"))
+      },
+    }),
     ...(shown()
       ? [
           viewCommand({

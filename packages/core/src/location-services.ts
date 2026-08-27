@@ -24,6 +24,7 @@ import { LocationMutation } from "./location-mutation.js"
 import { LocationServiceMap } from "./location-service-map.js"
 import { ModelResolver } from "./model-resolver.js"
 import { MCP } from "./mcp/index.js"
+import { McpInstructions } from "./mcp/instructions.js"
 import { Permission } from "./permission.js"
 import { Plugin } from "./plugin.js"
 import { PluginSupervisor } from "./plugin/supervisor.js"
@@ -89,6 +90,7 @@ const locationServiceNodes = [
   Image.node,
   SkillInstructions.node,
   ReferenceInstructions.node,
+  McpInstructions.node,
   InstructionEntry.node,
   Form.node,
   Generate.node,

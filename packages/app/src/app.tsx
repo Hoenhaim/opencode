@@ -74,7 +74,6 @@ export function AppBaseProviders(
           <UiI18nBridge>
             <ErrorBoundary
               fallback={(error) => {
-                void import("@sentry/solid").then(({ captureException }) => captureException(error))
                 return <ErrorPage error={error} />
               }}
             >

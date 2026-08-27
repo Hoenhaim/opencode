@@ -122,6 +122,8 @@ export const dict = {
   "dialog.model.search.placeholder": "Search models",
   "dialog.model.empty": "No model results",
   "dialog.model.manage": "Manage models",
+  "dialog.model.refresh": "Update model list",
+  "dialog.model.refreshing": "Updating model list",
   "dialog.model.manage.description": "Customize which models appear in the model selector.",
   "dialog.model.manage.provider.toggle": "Toggle all {{provider}} models",
 
@@ -503,6 +505,13 @@ export const dict = {
   "context.usage.cost": "Cost",
   "context.usage.clickToView": "Click to view context",
   "context.usage.view": "View context usage",
+
+  "session.tab.prompt": "Prompt",
+  "prompt.system.title": "System Prompt",
+  "prompt.sources.title": "Instruction files",
+  "prompt.sources.empty": "No instruction files discovered",
+  "prompt.open": "Open",
+  "command.view.prompt": "View system prompt",
 
   "language.en": "English",
   "language.zh": "简体中文",
@@ -1095,6 +1104,7 @@ export const dict = {
   "settings.providers.tag.config": "Config",
   "settings.providers.tag.custom": "Custom",
   "settings.providers.tag.other": "Other",
+  "settings.providers.models.refreshed": "Model list updated",
   "settings.models.title": "Models",
   "settings.models.description": "Choose which models appear in model picker",
   "settings.agents.title": "Agents",

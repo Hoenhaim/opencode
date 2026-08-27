@@ -1,8 +1,7 @@
 import { TextField } from "@opencode-ai/ui/text-field"
-import { captureException, isEnabled } from "@sentry/solid"
 import { Logo } from "@opencode-ai/ui/logo"
 import { Button } from "@opencode-ai/ui/button"
-import { Component, createSignal, onMount, Show } from "solid-js"
+import { Component, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -310,23 +309,6 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
             <Button size="large" variant="ghost" onClick={exportDebugLogs}>
               {language.t("error.page.action.exportLogs")}
             </Button>
-          </Show>
-          <Show when={isEnabled}>
-            {(_) => {
-              const [reported, setReported] = createSignal(false)
-              return (
-                <Button
-                  size="large"
-                  disabled={reported()}
-                  onClick={() => {
-                    captureException(props.error)
-                    setReported(true)
-                  }}
-                >
-                  {language.t(reported() ? "error.page.action.reported" : "error.page.action.report")}
-                </Button>
-              )
-            }}
           </Show>
           <Show when={platform.updater}>
             <Show

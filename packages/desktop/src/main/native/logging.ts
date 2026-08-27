@@ -29,7 +29,7 @@ const serviceLayer = Layer.effect(
     const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path
     yield* initLogging(fs, path).pipe(Effect.orDie)
-    yield* initCrashReporter(fs, path).pipe(Effect.orDie)
+    // yield* initCrashReporter(fs, path).pipe(Effect.orDie)
     yield* Effect.logInfo("app starting", {
       version: VERSION,
       packaged: app.isPackaged,

@@ -10,22 +10,6 @@ const channel = (() => {
 const nodePtyPkg = `@lydell/node-pty-${process.platform}-${process.arch}`
 
 const appPlugin = (await import("@opencode-ai/app/vite")).default
-const sentry =
-  process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_ORG && process.env.SENTRY_PROJECT
-    ? (await import("@sentry/vite-plugin")).sentryVitePlugin({
-        authToken: process.env.SENTRY_AUTH_TOKEN,
-        org: process.env.SENTRY_ORG,
-        project: process.env.SENTRY_PROJECT,
-        telemetry: false,
-        release: {
-          name: process.env.SENTRY_RELEASE ?? process.env.VITE_SENTRY_RELEASE,
-        },
-        sourcemaps: {
-          assets: "./out/renderer/**",
-          filesToDeleteAfterUpload: "./out/renderer/**/*.map",
-        },
-      })
-    : false
 
 export default defineConfig({
   main: {
@@ -80,7 +64,7 @@ const require = __cjs_mod__.createRequire(import.meta.url);
       "import.meta.env.OPENCODE_VERSION": JSON.stringify(process.env.OPENCODE_VERSION),
       "import.meta.env.VITE_OPENCODE_CHANNEL": JSON.stringify(channel),
     },
-    plugins: [appPlugin, sentry],
+    plugins: [appPlugin],
     publicDir: "../../../app/public",
     root: "src/renderer",
     build: {

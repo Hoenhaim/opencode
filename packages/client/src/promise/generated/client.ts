@@ -56,6 +56,8 @@ import type {
   SessionRevertCommitOutput,
   SessionContextInput,
   SessionContextOutput,
+  SessionSystemPromptInput,
+  SessionSystemPromptOutput,
   SessionInboxListInput,
   SessionInboxListOutput,
   SessionInboxCancelInput,
@@ -90,6 +92,8 @@ import type {
   ModelListOutput,
   ModelDefaultInput,
   ModelDefaultOutput,
+  ModelRefreshInput,
+  ModelRefreshOutput,
   GenerateTextInput,
   GenerateTextOutput,
   ProviderListInput,
@@ -766,6 +770,17 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ).then((value) => value.data),
+      systemPrompt: (input: SessionSystemPromptInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionSystemPromptOutput }>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/system-prompt`,
+            successStatus: 200,
+            declaredStatuses: [404, 500, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
       inbox: {
         list: (input: SessionInboxListInput, requestOptions?: RequestOptions) =>
           request<{ readonly data: SessionInboxListOutput }>(
@@ -965,6 +980,18 @@ export function make(options: ClientOptions) {
           {
             method: "GET",
             path: `/api/model/default`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [503, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      refresh: (input?: ModelRefreshInput, requestOptions?: RequestOptions) =>
+        request<ModelRefreshOutput>(
+          {
+            method: "POST",
+            path: `/api/model/refresh`,
             query: { location: input?.["location"] },
             successStatus: 200,
             declaredStatuses: [503, 401, 400],

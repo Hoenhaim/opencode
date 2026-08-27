@@ -1,6 +1,5 @@
 // @refresh reload
 
-import { init } from "@sentry/solid"
 import { render } from "solid-js/web"
 import { AppBaseProviders, AppInterface } from "@/app"
 import { loadInitialLocale } from "@/runtime/i18n/language"
@@ -44,25 +43,6 @@ const web = createWebPlatform(pkg.version)
 
 if (import.meta.env.PROD && "serviceWorker" in navigator) {
   window.addEventListener("load", () => void navigator.serviceWorker.register("/sw.js"), { once: true })
-}
-
-if (import.meta.env.VITE_SENTRY_DSN) {
-  init({
-    dsn: import.meta.env.VITE_SENTRY_DSN,
-    environment: import.meta.env.VITE_SENTRY_ENVIRONMENT ?? import.meta.env.MODE,
-    release: import.meta.env.VITE_SENTRY_RELEASE ?? `web@${pkg.version}`,
-    initialScope: {
-      tags: {
-        platform: "web",
-      },
-    },
-    integrations: (integrations) => {
-      return integrations.filter(
-        (i) =>
-          i.name !== "Breadcrumbs" && !(import.meta.env.OPENCODE_CHANNEL === "prod" && i.name === "GlobalHandlers"),
-      )
-    },
-  })
 }
 
 if (root instanceof HTMLElement && root.dataset.opencodeMounted === undefined) {

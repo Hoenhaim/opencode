@@ -145,30 +145,32 @@ export const layer = Layer.effect(
 
     const check = Effect.fn("cli.updater.check")(
       function* () {
-        if (OPENCODE_LOCAL || ["1", "true"].includes(process.env.OPENCODE_DISABLE_AUTOUPDATE?.toLowerCase() ?? ""))
-          return yield* Effect.logInfo("update check skipped", {
-            reason: OPENCODE_LOCAL ? "local-install" : "disabled",
-            version: OPENCODE_VERSION,
-            channel: OPENCODE_CHANNEL,
-          })
-        const policy = yield* readPolicy()
-        if (policy === false) return yield* Effect.logInfo("update check skipped", { reason: "policy-disabled" })
 
-        return yield* Effect.gen(function* () {
-          const version = yield* latest()
-          yield* Effect.logInfo("update check", {
-            current: OPENCODE_VERSION,
-            latest: version,
-          })
-          const next = action(OPENCODE_VERSION, version, policy)
-          if (next === "none") return yield* Effect.logInfo("update check done", { action: "up-to-date" })
-          if (next === "notify")
-            return yield* Effect.logInfo("OpenCode update available", { current: OPENCODE_VERSION, latest: version })
-          const detected = yield* method()
-          if (!detected) return yield* Effect.logWarning("automatic update skipped: installation method not found")
-          yield* upgrade(detected, version)
-          yield* Effect.logInfo("updated OpenCode", { from: OPENCODE_VERSION, to: version, method: detected })
-        })
+        yield* Effect.logInfo("update check skipped", { reason: "disabled", version: OPENCODE_VERSION })
+        // if (OPENCODE_LOCAL || ["1", "true"].includes(process.env.OPENCODE_DISABLE_AUTOUPDATE?.toLowerCase() ?? ""))
+        //   return yield* Effect.logInfo("update check skipped", {
+        //     reason: OPENCODE_LOCAL ? "local-install" : "disabled",
+        //     version: OPENCODE_VERSION,
+        //     channel: OPENCODE_CHANNEL,
+        //   })
+        // const policy = yield* readPolicy()
+        // if (policy === false) return yield* Effect.logInfo("update check skipped", { reason: "policy-disabled" })
+        //
+        // return yield* Effect.gen(function* () {
+        //   const version = yield* latest()
+        //   yield* Effect.logInfo("update check", {
+        //     current: OPENCODE_VERSION,
+        //     latest: version,
+        //   })
+        //   const next = action(OPENCODE_VERSION, version, policy)
+        //   if (next === "none") return yield* Effect.logInfo("update check done", { action: "up-to-date" })
+        //   if (next === "notify")
+        //     return yield* Effect.logInfo("OpenCode update available", { current: OPENCODE_VERSION, latest: version })
+        //   const detected = yield* method()
+        //   if (!detected) return yield* Effect.logWarning("automatic update skipped: installation method not found")
+        //   yield* upgrade(detected, version)
+        //   yield* Effect.logInfo("updated OpenCode", { from: OPENCODE_VERSION, to: version, method: detected })
+        // })
       },
       Effect.catchCause((cause) => Effect.logWarning("automatic update failed", { cause })),
     )

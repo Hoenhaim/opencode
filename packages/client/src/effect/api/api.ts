@@ -334,6 +334,15 @@ export type SessionContextInput = { readonly sessionID: Session.ID }
 export type SessionContextOutput = ReadonlyArray<SessionMessage.Info>
 export type SessionContextOperation<E = never> = (input: SessionContextInput) => Effect.Effect<SessionContextOutput, E>
 
+export type SessionSystemPromptInput = { readonly sessionID: Session.ID }
+export type SessionSystemPromptOutput = {
+  readonly system: ReadonlyArray<string>
+  readonly sources: ReadonlyArray<{ readonly path: string; readonly content: string }>
+}
+export type SessionSystemPromptOperation<E = never> = (
+  input: SessionSystemPromptInput,
+) => Effect.Effect<SessionSystemPromptOutput, E>
+
 export type SessionInboxListInput = { readonly sessionID: Session.ID }
 export type SessionInboxListOutput = ReadonlyArray<SessionInbox.Info>
 export type SessionInboxListOperation<E = never> = (
@@ -1053,6 +1062,7 @@ export interface SessionApi<E = never> {
     readonly commit: SessionRevertCommitOperation<E>
   }
   readonly context: SessionContextOperation<E>
+  readonly systemPrompt: SessionSystemPromptOperation<E>
   readonly inbox: {
     readonly list: SessionInboxListOperation<E>
     readonly cancel: SessionInboxCancelOperation<E>
@@ -1103,9 +1113,16 @@ export type ModelDefaultInput = {
 export type ModelDefaultOutput = { readonly location: Location.Info; readonly data: Model.Info | undefined }
 export type ModelDefaultOperation<E = never> = (input?: ModelDefaultInput) => Effect.Effect<ModelDefaultOutput, E>
 
+export type ModelRefreshInput = {
+  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+}
+export type ModelRefreshOutput = { readonly location: Location.Info; readonly data: ReadonlyArray<Model.Info> }
+export type ModelRefreshOperation<E = never> = (input?: ModelRefreshInput) => Effect.Effect<ModelRefreshOutput, E>
+
 export interface ModelApi<E = never> {
   readonly list: ModelListOperation<E>
   readonly default: ModelDefaultOperation<E>
+  readonly refresh: ModelRefreshOperation<E>
 }
 
 export type GenerateTextInput = { readonly prompt: string; readonly model?: Model.Ref | undefined }

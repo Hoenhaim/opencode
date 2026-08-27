@@ -17,6 +17,7 @@ import { KV } from "../kv.js"
 import { Location } from "../location.js"
 import { Model } from "../model.js"
 import { MCP } from "../mcp/index.js"
+import { ModelsDev } from "../models-dev.js"
 import { PluginRuntime } from "./runtime.js"
 import { Provider } from "../provider.js"
 import { Reference } from "../reference.js"
@@ -39,6 +40,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
   const integration = yield* Integration.Service
   const kv = yield* KV.Service
   const mcp = yield* MCP.Service
+  const modelsDev = yield* ModelsDev.Service
   const location = yield* Location.Service
   const reference = yield* Reference.Service
   const skill = yield* Skill.Service
@@ -152,6 +154,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
       model: {
         list: () => response(catalog.model.available()),
         default: () => response(catalog.model.default()),
+        refresh: () => Effect.flatMap(modelsDev.refresh(true), () => response(catalog.model.available())),
       },
       reload: catalog.reload,
       transform: (callback) =>

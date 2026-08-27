@@ -522,6 +522,31 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
       ),
     )
     .add(
+      HttpApiEndpoint.get("session.systemPrompt", "/api/session/:sessionID/system-prompt", {
+        params: { sessionID: Session.ID },
+        success: Schema.Struct({
+          data: Schema.Struct({
+            system: Schema.Array(Schema.String),
+            sources: Schema.Array(
+              Schema.Struct({ path: Schema.String, content: Schema.String }).annotate({
+                identifier: "SessionInstructionSource",
+              }),
+            ),
+          }).annotate({ identifier: "SessionSystemPromptResponse" }),
+        }),
+        error: [SessionNotFoundError, UnknownError],
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.session.systemPrompt",
+            summary: "Get session system prompt",
+            description:
+              "Retrieve the system prompt parts supplied to the model for the session's next provider turn, plus discovered instruction source files.",
+          }),
+        ),
+    )
+    .add(
       HttpApiEndpoint.get("session.inbox.list", "/api/session/:sessionID/inbox", {
         params: { sessionID: Session.ID },
         success: Schema.Struct({ data: Schema.Array(SessionInbox.Info) }),

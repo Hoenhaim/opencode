@@ -16,6 +16,8 @@ import { TextInput } from "@opencode-ai/ui/text-input"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { ModelTooltip } from "./tooltip"
 import { useLanguage } from "@/runtime/i18n/language"
+import { useServerSDK } from "@/runtime/server/client"
+import { useData } from "@/runtime/server/current"
 import { decode64 } from "@/runtime/persistence/base64"
 import { handleDocumentSearchKeydown } from "@/shell/commands/search-keydown"
 import { createMenuDismissController } from "@/shell/commands/menu-dismiss"
@@ -26,6 +28,29 @@ import "@/settings/settings.css"
 
 const isFree = (provider: string, cost: { input: number } | undefined) =>
   provider === "opencode" && (!cost || cost.input === 0)
+
+const refreshKey = "action:refresh"
+
+function useRefreshModels() {
+  const sdk = useServerSDK()
+  const data = useData()
+  const [store, setStore] = createStore({ active: false })
+  const run = async () => {
+    if (store.active) return
+    setStore("active", true)
+    try {
+      await sdk.api.model.refresh()
+      data.location.provider.invalidate()
+      data.location.model.invalidate()
+      await Promise.all([data.location.provider.sync(), data.location.model.sync()])
+    } catch (error) {
+      console.error("model catalog refresh failed", error)
+    } finally {
+      setStore("active", false)
+    }
+  }
+  return { refreshing: () => store.active, run }
+}
 
 type ModelState = ReturnType<typeof useLocal>["model"]
 type ModelItem = ReturnType<ModelState["list"]>[number]
@@ -308,13 +333,14 @@ function ModelSelectorPopoverView(props: {
 }) {
   const language = useLanguage()
   const [store, setStore] = createStore({ open: false, search: "", active: "" })
+  const refresh = useRefreshModels()
   let searchRef: HTMLInputElement | undefined
   let contentRef: HTMLDivElement | undefined
   const dismiss = createMenuDismissController(() => contentRef)
 
   const models = createMemo(() => props.models(store.search))
   const groups = createMemo(() => props.groups(models()))
-  const keys = () => [...models().map(modelKey), manageKey]
+  const keys = () => [...models().map(modelKey), refreshKey, manageKey]
   const initialActive = () => {
     const selected = props.current
     const options = keys()
@@ -347,12 +373,16 @@ function ModelSelectorPopoverView(props: {
     setOpen(false)
     dismiss.afterClose(props.onManage)
   }
+  const refreshModels = () => {
+    void refresh.run()
+  }
   const selectActive = () => {
     const item = models().find((item) => modelKey(item) === store.active)
     if (item) {
       selectModel(item)
       return
     }
+    if (store.active === refreshKey) refreshModels()
     if (store.active === manageKey) manage()
   }
   const moveActive = (delta: number) => {
@@ -509,6 +539,25 @@ function ModelSelectorPopoverView(props: {
           <div class="h-px bg-v2-border-border-muted" />
           <div class="flex flex-col p-0.5">
             <Menu.Item
+              data-option-key={refreshKey}
+              classList={{
+                "!bg-v2-overlay-simple-overlay-hover": store.active === refreshKey,
+                "opacity-60": refresh.refreshing(),
+              }}
+              onMouseEnter={() => {
+                setStore("active", refreshKey)
+                setTimeout(() => searchRef?.focus())
+              }}
+              onSelect={refreshModels}
+            >
+              <Icon name="reset" size="small" />
+              <span class="min-w-0 flex-1 truncate leading-5">
+                {refresh.refreshing()
+                  ? language.t("dialog.model.refreshing")
+                  : language.t("dialog.model.refresh")}
+              </span>
+            </Menu.Item>
+            <Menu.Item
               data-option-key={manageKey}
               classList={{ "!bg-v2-overlay-simple-overlay-hover": store.active === manageKey }}
               onMouseEnter={() => {
@@ -531,6 +580,7 @@ export const DialogSelectModel: Component<{ provider?: string; model?: ModelStat
   const dialog = useDialog()
   const language = useLanguage()
   const local = useLocal()
+  const refresh = useRefreshModels()
   const directory = () => decode64(local.slug())
 
   const provider = () => {
@@ -556,6 +606,20 @@ export const DialogSelectModel: Component<{ provider?: string; model?: ModelStat
       <DialogBody class="flex min-h-0 flex-1 flex-col">
         <ModelList provider={props.provider} model={props.model} onSelect={() => dialog.close()} />
         <div class="shrink-0 border-t border-v2-border-border-muted px-4 py-3">
+          <button
+            type="button"
+            class="flex h-9 w-full items-center gap-2 rounded-md px-3 text-left text-[13px] font-[530] leading-text-compact tracking-[-0.04px] text-v2-text-text-base hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+            classList={{ "opacity-60": refresh.refreshing() }}
+            disabled={refresh.refreshing()}
+            onClick={() => void refresh.run()}
+          >
+            <Icon name="reset" size="small" />
+            <span class="min-w-0 flex-1 truncate">
+              {refresh.refreshing()
+                ? language.t("dialog.model.refreshing")
+                : language.t("dialog.model.refresh")}
+            </span>
+          </button>
           <button
             type="button"
             class="flex h-9 w-full items-center gap-2 rounded-md px-3 text-left text-[13px] font-[530] leading-text-compact tracking-[-0.04px] text-v2-text-text-base hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"

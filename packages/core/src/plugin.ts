@@ -15,6 +15,7 @@ import { Integration } from "./integration.js"
 import { KV } from "./kv.js"
 import { MCP } from "./mcp/index.js"
 import { Location } from "./location.js"
+import { ModelsDev } from "./models-dev.js"
 import { PluginHost } from "./plugin/host.js"
 import { PluginRuntime } from "./plugin/runtime.js"
 import { WebSearch } from "./websearch.js"
@@ -196,6 +197,7 @@ export const node = makeLocationNode({
     KV.node,
     MCP.node,
     Location.node,
+    ModelsDev.node,
     Reference.node,
     Skill.node,
     Tool.node,

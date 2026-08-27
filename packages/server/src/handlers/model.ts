@@ -33,5 +33,13 @@ export const ModelHandler = HttpApiBuilder.group(Api, "server.model", (handlers)
           return yield* response(catalog.model.default())
         }),
       )
+      .handle(
+        "model.refresh",
+        Effect.fn(function* () {
+          yield* flushPlugins
+          const catalog = yield* Catalog.Service
+          return yield* response(catalog.model.available())
+        }),
+      )
   }),
 )

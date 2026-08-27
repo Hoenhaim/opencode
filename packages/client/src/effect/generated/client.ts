@@ -62,6 +62,8 @@ import type {
   SessionRevertCommitOutput,
   SessionContextInput,
   SessionContextOutput,
+  SessionSystemPromptInput,
+  SessionSystemPromptOutput,
   SessionInboxListInput,
   SessionInboxListOutput,
   SessionInboxCancelInput,
@@ -96,6 +98,8 @@ import type {
   ModelListOutput,
   ModelDefaultInput,
   ModelDefaultOutput,
+  ModelRefreshInput,
+  ModelRefreshOutput,
   GenerateTextInput,
   GenerateTextOutput,
   ProviderListInput,
@@ -533,6 +537,14 @@ const EndpointSessionContext = (raw: RawClient["server.session"]) => (input: Ses
     ),
   )
 
+const EndpointSessionSystemPrompt = (raw: RawClient["server.session"]) => (input: SessionSystemPromptInput) =>
+  preserveEffect<SessionSystemPromptOutput>()(
+    raw["session.systemPrompt"]({ params: { sessionID: input["sessionID"] } }).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
 const EndpointSessionInboxList = (raw: RawClient["server.session"]) => (input: SessionInboxListInput) =>
   preserveEffect<SessionInboxListOutput>()(
     raw["session.inbox.list"]({ params: { sessionID: input["sessionID"] } }).pipe(
@@ -672,6 +684,7 @@ const adaptGroupSession = (raw: RawClient["server.session"]) => ({
     commit: EndpointSessionRevertCommit(raw),
   },
   context: EndpointSessionContext(raw),
+  systemPrompt: EndpointSessionSystemPrompt(raw),
   inbox: {
     list: EndpointSessionInboxList(raw),
     cancel: EndpointSessionInboxCancel(raw),
@@ -714,9 +727,15 @@ const EndpointModelDefault = (raw: RawClient["server.model"]) => (input?: ModelD
     raw["model.default"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
+const EndpointModelRefresh = (raw: RawClient["server.model"]) => (input?: ModelRefreshInput) =>
+  preserveEffect<ModelRefreshOutput>()(
+    raw["model.refresh"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
 const adaptGroupModel = (raw: RawClient["server.model"]) => ({
   list: EndpointModelList(raw),
   default: EndpointModelDefault(raw),
+  refresh: EndpointModelRefresh(raw),
 })
 
 const EndpointGenerateText = (raw: RawClient["server.generate"]) => (input: GenerateTextInput) =>
