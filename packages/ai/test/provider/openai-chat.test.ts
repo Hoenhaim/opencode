@@ -85,6 +85,28 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("omits empty and whitespace-only assistant messages", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.user("Before."),
+            Message.assistant([]),
+            Message.assistant(""),
+            Message.assistant(" \n\t "),
+            Message.assistant("After."),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        { role: "user", content: "Before." },
+        { role: "assistant", content: "After." },
+      ])
+    }),
+  )
+
   it.effect("replays canonical reasoning as OpenAI-compatible reasoning_content", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
@@ -147,6 +169,56 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("preserves observed reasoning fields when reasoning is required", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: LanguageModel.update(model, { compatibility: { requireReasoning: true } }),
+          messages: [
+            Message.assistant([
+              {
+                type: "reasoning",
+                text: "thinking",
+                providerMetadata: { openai: { reasoningField: "reasoning_text" } },
+              },
+              { type: "text", text: "Hello" },
+            ]),
+            Message.assistant("Done"),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        { role: "assistant", content: "Hello", reasoning_text: "thinking" },
+        { role: "assistant", content: "Done", reasoning_content: "" },
+      ])
+    }),
+  )
+
+  it.effect("omits empty configured reasoning fields when reasoning is explicitly optional", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: LanguageModel.update(model, {
+            compatibility: { reasoningField: "reasoning_text", requireReasoning: false },
+          }),
+          messages: [
+            Message.assistant([
+              { type: "reasoning", text: "thinking" },
+              { type: "text", text: "Hello" },
+            ]),
+            Message.assistant("Done"),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        { role: "assistant", content: "Hello", reasoning_text: "thinking" },
+        { role: "assistant", content: "Done" },
+      ])
+    }),
+  )
+
   it.effect("rejects reasoning fields that conflict with assistant message fields", () =>
     Effect.gen(function* () {
       const error = yield* compileRequest(
@@ -189,6 +261,21 @@ describe("OpenAI Chat route", () => {
       )
 
       expect(prepared.body.prompt_cache_key).toBe("session_123")
+    }),
+  )
+
+  it.effect("omits the prompt cache key when caching is disabled", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          prompt: "Hello",
+          promptCacheKey: "session_123",
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body).not.toHaveProperty("prompt_cache_key")
     }),
   )
 
@@ -351,6 +438,35 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("limits OpenAI and Azure Chat tool call IDs to 40 characters", () =>
+    Effect.gen(function* () {
+      const id = `call_${"a".repeat(48)}`
+      const models = [
+        model,
+        Azure.configure({ baseURL: "https://opencode-test.openai.azure.com/openai/", apiKey: "test" }).chat("gpt-4o"),
+      ]
+
+      yield* Effect.forEach(models, (selected) =>
+        Effect.gen(function* () {
+          const prepared = yield* compileRequest(
+            LLM.request({
+              model: selected,
+              messages: [
+                Message.assistant([ToolCallPart.make({ id, name: "lookup", input: {} })]),
+                Message.tool({ id, name: "lookup", result: "Sunny" }),
+              ],
+            }),
+          )
+
+          expect(prepared.body.messages).toMatchObject([
+            { role: "assistant", tool_calls: [{ id: id.slice(0, 40) }] },
+            { role: "tool", tool_call_id: id.slice(0, 40) },
+          ])
+        }),
+      )
+    }),
+  )
+
   it.effect("preserves structured tool errors for the model", () =>
     Effect.gen(function* () {
       const error = { error: { type: "unknown", message: "Tool execution interrupted" } }
@@ -413,6 +529,30 @@ describe("OpenAI Chat route", () => {
         },
       ])
       expect(JSON.stringify(prepared.body.messages)).not.toContain('"content":"AAECAw=="')
+    }),
+  )
+
+  it.effect("bridges image tool results before their synthetic user message when required", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: LanguageModel.update(model, { compatibility: { requireAssistantAfterTool: true } }),
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_image", name: "read", input: {} })]),
+            Message.tool({
+              id: "call_image",
+              name: "read",
+              result: {
+                type: "content",
+                value: [{ type: "file", uri: "data:image/png;base64,AAECAw==", mime: "image/png", name: "pixel.png" }],
+              },
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages.map((message) => message.role)).toEqual(["assistant", "tool", "assistant", "user"])
+      expect(prepared.body.messages[2]).toEqual({ role: "assistant", content: "Done." })
     }),
   )
 
@@ -760,6 +900,70 @@ describe("OpenAI Chat route", () => {
         const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
         expect(replay.body.messages).toEqual([{ role: "assistant", content: "Hello", [field]: "thinking" }])
       }
+    }),
+  )
+
+  it.effect("uses the configured provider metadata namespace for reasoning and usage", () =>
+    Effect.gen(function* () {
+      const selected = LanguageModel.update(model, {
+        route: { ...model.route, providerMetadataKey: "vendor" },
+      })
+      const details = [{ type: "reasoning.text", text: "thinking", signature: "signed" }]
+      const response = yield* LLMClient.generate(LLMRequest.update(request, { model: selected })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { choices: [{ delta: { reasoning: "thinking", reasoning_details: details } }] },
+              deltaChunk({ content: "Hello" }),
+              deltaChunk({}, "stop"),
+              usageChunk({ prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 }),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
+        vendor: { reasoningField: "reasoning", reasoningDetails: details },
+      })
+      expect(response.usage?.providerMetadata).toEqual({
+        vendor: { prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 },
+      })
+
+      const replay = yield* compileRequest(LLM.request({ model: selected, messages: [response.message] }))
+      expect(replay.body.messages).toEqual([
+        { role: "assistant", content: "Hello", reasoning: "thinking", reasoning_details: details },
+      ])
+    }),
+  )
+
+  it.effect("falls back to the selected provider for the metadata namespace", () =>
+    Effect.gen(function* () {
+      const compatible = model.route.with({ provider: "deepseek" }).model({ id: "deepseek-chat" })
+      const selected = LanguageModel.update(compatible, {
+        route: { ...compatible.route, providerMetadataKey: undefined },
+      })
+      const response = yield* LLMClient.generate(LLMRequest.update(request, { model: selected })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ reasoning_content: "thinking" }),
+              deltaChunk({ content: "Hello" }),
+              deltaChunk({}, "stop"),
+              usageChunk({ prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 }),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
+        deepseek: { reasoningField: "reasoning_content" },
+      })
+      expect(response.usage?.providerMetadata).toEqual({
+        deepseek: { prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 },
+      })
+
+      const replay = yield* compileRequest(LLM.request({ model: selected, messages: [response.message] }))
+      expect(replay.body.messages).toEqual([{ role: "assistant", content: "Hello", reasoning_content: "thinking" }])
     }),
   )
 

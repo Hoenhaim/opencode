@@ -46,14 +46,16 @@ export const SettingsProviders: Component<{
   const integration = (providerID: string) => integrations.list().find((item) => item.id === providerID)
 
   const [refresh, setRefresh] = createStore({ active: false })
+  const location = () => (props.directory ? { directory: props.directory } : undefined)
   const refreshModels = async () => {
     if (refresh.active) return
     setRefresh("active", true)
     try {
-      await serverSdk.api.model.refresh()
-      data.location.provider.invalidate()
-      data.location.model.invalidate()
-      await Promise.all([data.location.provider.sync(), data.location.model.sync()])
+      const ref = location()
+      await serverSdk.api.model.refresh({ location: ref })
+      data.location.provider.invalidate(ref)
+      data.location.model.invalidate(ref)
+      await Promise.all([data.location.provider.sync(ref), data.location.model.sync(ref)])
       showToast({
         variant: "success",
         icon: "circle-check",

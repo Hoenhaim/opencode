@@ -10,6 +10,7 @@ const channel = (() => {
 const nodePtyPkg = `@lydell/node-pty-${process.platform}-${process.arch}`
 
 const appPlugin = (await import("@opencode-ai/app/vite")).default
+const picker = (await import("@brendonovich/vite-plugin-opencode")).default()
 
 export default defineConfig({
   main: {
@@ -64,7 +65,7 @@ const require = __cjs_mod__.createRequire(import.meta.url);
       "import.meta.env.OPENCODE_VERSION": JSON.stringify(process.env.OPENCODE_VERSION),
       "import.meta.env.VITE_OPENCODE_CHANNEL": JSON.stringify(channel),
     },
-    plugins: [appPlugin],
+    plugins: [{ ...picker, transformIndexHtml: undefined }, appPlugin],
     publicDir: "../../../app/public",
     root: "src/renderer",
     build: {

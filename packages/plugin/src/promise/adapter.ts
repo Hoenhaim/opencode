@@ -69,6 +69,7 @@ export function fromPromise(plugin: Plugin) {
   return define({
     id: plugin.id,
     tui: plugin.tui,
+    vcs: plugin.vcs,
     effect: (host) =>
       Effect.gen(function* () {
         const [{ ClientApi }, { OpenCodeEvent }] = yield* Effect.promise(() =>
@@ -76,14 +77,17 @@ export function fromPromise(plugin: Plugin) {
         )
         const AgentEndpoints = ClientApi.groups["server.agent"].endpoints
         const CommandEndpoints = ClientApi.groups["server.command"].endpoints
+        const GenerateEndpoints = ClientApi.groups["server.generate"].endpoints
         const IntegrationEndpoints = ClientApi.groups["server.integration"].endpoints
         const McpEndpoints = ClientApi.groups["server.mcp"].endpoints
         const ModelEndpoints = ClientApi.groups["server.model"].endpoints
         const PluginEndpoints = ClientApi.groups["server.plugin"].endpoints
+        const PermissionEndpoints = ClientApi.groups["server.permission"].endpoints
         const ProviderEndpoints = ClientApi.groups["server.provider"].endpoints
         const ReferenceEndpoints = ClientApi.groups["server.reference"].endpoints
         const SessionEndpoints = ClientApi.groups["server.session"].endpoints
         const SkillEndpoints = ClientApi.groups["server.skill"].endpoints
+        const VcsEndpoints = ClientApi.groups["server.vcs"].endpoints
         const WebSearchEndpoints = ClientApi.groups["server.websearch"].endpoints
         const context = yield* Effect.context<Scope.Scope>()
 
@@ -94,6 +98,20 @@ export function fromPromise(plugin: Plugin) {
           }))
 
         const run = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromiseWith(context)(effect)
+
+        const promiseTool = (tool: Tool.Info & { readonly id: string }): Info & { readonly id: string } => {
+          const execute = tool.execute
+          return {
+            ...tool,
+            execute: (input, context) =>
+              run(
+                execute(input, {
+                  ...context,
+                  progress: (update) => Effect.promise(() => context.progress(update)),
+                }),
+              ),
+          }
+        }
 
         const adaptApiMethod = <PromiseMethod>(
           endpoint: HttpApiEndpoint.Top,
@@ -122,6 +140,7 @@ export function fromPromise(plugin: Plugin) {
 
         const context2: Context = {
           app: host.app,
+          location: host.location,
           options: host.options,
           agent: {
             get: adaptApiMethod(AgentEndpoints["agent.get"], host.agent.get),
@@ -173,6 +192,9 @@ export function fromPromise(plugin: Plugin) {
                   Stream.map((event) => event as unknown as PromiseEvent),
                 ),
               ),
+          },
+          generate: {
+            text: adaptApiMethod(GenerateEndpoints["generate.text"], host.generate.text),
           },
           integration: {
             list: adaptApiMethod(IntegrationEndpoints["integration.list"], host.integration.list),
@@ -254,12 +276,15 @@ export function fromPromise(plugin: Plugin) {
           },
           mcp: {
             list: adaptApiMethod(McpEndpoints["mcp.list"], host.mcp.list),
-            add: adaptApiMethod(McpEndpoints["mcp.add"], host.mcp.add),
-            remove: adaptApiMethod(McpEndpoints["mcp.remove"], host.mcp.remove),
-            connect: adaptApiMethod(McpEndpoints["mcp.connect"], host.mcp.connect),
-            disconnect: adaptApiMethod(McpEndpoints["mcp.disconnect"], host.mcp.disconnect),
             transform: transform(host.mcp),
             reload: () => run(host.mcp.reload()),
+          },
+          permission: {
+            hook: (name, callback) =>
+              register(host.permission.hook(name, (event) => Effect.promise(() => Promise.resolve(callback(event))))),
+            list: adaptApiMethod(PermissionEndpoints["session.permission.list"], host.permission.list),
+            get: adaptApiMethod(PermissionEndpoints["session.permission.get"], host.permission.get),
+            reply: adaptApiMethod(PermissionEndpoints["session.permission.reply"], host.permission.reply),
           },
           plugin: {
             list: adaptApiMethod(PluginEndpoints["plugin.list"], host.plugin.list),
@@ -281,20 +306,72 @@ export function fromPromise(plugin: Plugin) {
             scan: (options) => run(host.storage.scan(options)),
           },
           tool: {
+            reload: () => run(host.tool.reload()),
             transform: (callback) =>
               register(
                 host.tool.transform((draft) =>
                   callback({
+                    list: () => draft.list().map((tool) => promiseTool(tool)),
+                    get: (id) => {
+                      const tool = draft.get(id)
+                      return tool ? promiseTool(tool) : undefined
+                    },
                     add: (tool: Info) =>
                       draft.add({
                         ...tool,
                         execute: (input, context) => executePromiseTool(tool, input, context),
                       }),
+                    update: (id, update) =>
+                      draft.update(id, (tool) => {
+                        const execute = tool.execute
+                        const value: Info = {
+                          ...tool,
+                          execute: (input, context) =>
+                            run(
+                              execute(input, {
+                                ...context,
+                                progress: (update) => Effect.promise(() => context.progress(update)),
+                              }),
+                            ),
+                        }
+                        update(value)
+                        Object.assign(tool, value, {
+                          output: value.output,
+                          options: value.options,
+                          execute: (input: Parameters<Info["execute"]>[0], context: Tool.Context) =>
+                            executePromiseTool(value, input, context),
+                        })
+                      }),
+                    remove: draft.remove,
                   }),
                 ),
               ),
             hook: (name, callback) =>
               register(host.tool.hook(name, (event) => Effect.promise(() => Promise.resolve(callback(event))))),
+          },
+          vcs: {
+            get: adaptApiMethod(VcsEndpoints["vcs.get"], host.vcs.get),
+            branches: adaptApiMethod(VcsEndpoints["vcs.branches"], host.vcs.branches),
+            status: adaptApiMethod(VcsEndpoints["vcs.status"], host.vcs.status),
+            diff: adaptApiMethod(VcsEndpoints["vcs.diff"], host.vcs.diff),
+            reload: () => run(host.vcs.reload()),
+            transform: (callback) =>
+              register(
+                host.vcs.transform((draft) => {
+                  callback({
+                    add: (definition) =>
+                      draft.add({
+                        id: definition.id,
+                        name: definition.name,
+                        info: (input) => attempt((signal) => definition.info(input, { signal })),
+                        branches: (input) => attempt((signal) => definition.branches(input, { signal })),
+                        status: (input) => attempt((signal) => definition.status(input, { signal })),
+                        diff: (input) => attempt((signal) => definition.diff(input, { signal })),
+                      }),
+                    default: draft.default,
+                  })
+                }),
+              ),
           },
           websearch: {
             providers: adaptApiMethod(WebSearchEndpoints["websearch.providers"], host.websearch.providers),
@@ -330,7 +407,9 @@ export function fromPromise(plugin: Plugin) {
             synthetic: adaptApiMethod(SessionEndpoints["session.synthetic"], host.session.synthetic),
             interrupt: adaptApiMethod(SessionEndpoints["session.interrupt"], host.session.interrupt),
             rename: adaptApiMethod(SessionEndpoints["session.rename"], host.session.rename),
+            move: adaptApiMethod(SessionEndpoints["session.move"], host.session.move),
             wait: adaptApiMethod(SessionEndpoints["session.wait"], host.session.wait),
+            context: adaptApiMethod(SessionEndpoints["session.context"], host.session.context),
           },
           shell: {
             hook: (name, callback) =>

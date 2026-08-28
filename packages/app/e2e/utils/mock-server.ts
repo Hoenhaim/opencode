@@ -21,6 +21,7 @@ export interface MockServerConfig {
     cursor?: string
   }
   vcsDiff?: unknown[]
+  vcsBranches?: string[]
   messageDelay?: number
   beforeMessagesResponse?: (input: { sessionID: string; before?: string }) => Promise<void>
   onMessages?: (input: { sessionID: string; before?: string; phase: "start" | "end" }) => void
@@ -143,12 +144,14 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
   )
   page.on("close", () => void transport.dispose())
 
-  await page.route("**/*", async (route) => {
+  await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url())
     const appPort = new URL(
       process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${process.env.PLAYWRIGHT_PORT ?? "3000"}`,
     ).port
     if (url.origin !== server && url.port !== appPort) return route.fallback()
+    // Production serves the UI and API from one origin; leave app assets to Vite.
+    if (!url.pathname.startsWith("/api/")) return route.fallback()
     if (route.request().method() === "OPTIONS") {
       return route.fulfill({ status: 204, headers: corsHeaders })
     }
@@ -296,6 +299,7 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
         vcs: () =>
           Effect.succeed({ location: location(config), data: { branch: { current: "main", default: "main" } } }),
         vcsStatus: () => Effect.succeed({ location: location(config), data: [] }),
+        vcsBranches: () => Effect.succeed({ location: location(config), data: config.vcsBranches ?? ["main"] }),
         vcsDiff: () => Effect.succeed({ location: location(config), data: config.vcsDiff ?? [] }),
         fsList: (ctx) =>
           Effect.promise(() => Promise.resolve(config.fileList?.(ctx.query.path ?? ""))).pipe(

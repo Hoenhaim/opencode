@@ -1,4 +1,5 @@
 import { Catalog } from "@opencode-ai/core/catalog"
+import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { ServiceUnavailableError } from "@opencode-ai/protocol/errors"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
@@ -37,6 +38,8 @@ export const ModelHandler = HttpApiBuilder.group(Api, "server.model", (handlers)
         "model.refresh",
         Effect.fn(function* () {
           yield* flushPlugins
+          const modelsDev = yield* ModelsDev.Service
+          yield* modelsDev.refresh(true)
           const catalog = yield* Catalog.Service
           return yield* response(catalog.model.available())
         }),

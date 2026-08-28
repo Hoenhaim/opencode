@@ -143,8 +143,7 @@ export type Draft = {
   setGlobalCodemode: (value: boolean | undefined) => void
 }
 
-const cloneConfig = (config: Mcp.ServerConfig) =>
-  structuredClone(config) as Types.DeepMutable<Mcp.ServerConfig>
+const cloneConfig = (config: Mcp.ServerConfig) => structuredClone(config) as Types.DeepMutable<Mcp.ServerConfig>
 
 export interface Interface extends State.Transformable<Draft> {
   readonly servers: () => Effect.Effect<ServerInfo[]>
@@ -232,6 +231,7 @@ export const layer = (options?: Options) =>
           .transform((draft) => {
             draft.update(integrationID, (ref) => {
               ref.name = name
+              ref.metadata = { source: "mcp" }
             })
             draft.method.update({
               integrationID,
@@ -267,8 +267,7 @@ export const layer = (options?: Options) =>
           // No browser during connect: an auth-gated server surfaces needs_auth instead of opening a browser.
           onRedirect: () => {},
         }
-        const stored = yield* credentials.list(entry.integrationID)
-        const found = stored.find((credential) => credential.value.type === "oauth")
+        const found = (yield* credentials.list(entry.integrationID)).at(-1)
         if (!found || found.value.type !== "oauth")
           // No stored credential yet: an empty in-memory store still lets the SDK run the auth handshake, which
           // ends in UnauthorizedError -> needs_auth. Returning no provider instead would let the transport throw
@@ -291,8 +290,8 @@ export const layer = (options?: Options) =>
           // Drop a credential the SDK rejected so the next connect cleanly reports needs_auth — but only if it is
           // still the stored one. Rotating servers hand out a fresh refresh token per use, so a concurrent
           // connection may have already replaced ours; deleting then would discard the newer valid credential and
-          // strand every connection in needs_auth until a manual re-auth. Uses the raw credential service (no
-          // integration event) to avoid re-triggering the reconnect subscriber mid-connect.
+          // strand every connection in needs_auth until a manual re-auth. Credential deletion notifies all locations;
+          // reconnects remain serialized by the server lock.
           invalidate: async (scope) => {
             if (scope === "verifier" || scope === "discovery") return
             const oauth = await readOAuthCredential()
@@ -696,7 +695,7 @@ export const layer = (options?: Options) =>
           }).pipe(locks.withLock(name))
         })
       fork(
-        bus.subscribe(Integration.Event.ConnectionUpdated).pipe(
+        bus.subscribe(Credential.Event.Switched).pipe(
           Stream.filter((event) => owned.has(event.data.integrationID)),
           Stream.runForEach((event) => Effect.sync(() => fork(reconnect(event.data.integrationID)))),
           Effect.ignore,
@@ -710,9 +709,7 @@ export const layer = (options?: Options) =>
               config === false ? [] : [[name, cloneConfig(config)] as const],
             ),
           ),
-          removed: new Set(
-            Array.from(overrides).flatMap(([name, config]) => (config === false ? [name] : [])),
-          ),
+          removed: new Set(Array.from(overrides).flatMap(([name, config]) => (config === false ? [name] : []))),
         }),
         draft: (draft) => ({
           list: () => Array.from(draft.servers),

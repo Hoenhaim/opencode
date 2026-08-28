@@ -34,15 +34,21 @@ const refreshKey = "action:refresh"
 function useRefreshModels() {
   const sdk = useServerSDK()
   const data = useData()
+  const local = useLocal()
   const [store, setStore] = createStore({ active: false })
+  const location = () => {
+    const directory = decode64(local.slug())
+    return directory ? { directory } : undefined
+  }
   const run = async () => {
     if (store.active) return
     setStore("active", true)
     try {
-      await sdk.api.model.refresh()
-      data.location.provider.invalidate()
-      data.location.model.invalidate()
-      await Promise.all([data.location.provider.sync(), data.location.model.sync()])
+      const ref = location()
+      await sdk.api.model.refresh({ location: ref })
+      data.location.provider.invalidate(ref)
+      data.location.model.invalidate(ref)
+      await Promise.all([data.location.provider.sync(ref), data.location.model.sync(ref)])
     } catch (error) {
       console.error("model catalog refresh failed", error)
     } finally {
@@ -548,6 +554,7 @@ function ModelSelectorPopoverView(props: {
                 setStore("active", refreshKey)
                 setTimeout(() => searchRef?.focus())
               }}
+              closeOnSelect={false}
               onSelect={refreshModels}
             >
               <Icon name="reset" size="small" />

@@ -9,6 +9,9 @@ import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor-service"
 import { ReferenceInstructions } from "@opencode-ai/core/reference/instructions"
 import { Session } from "@opencode-ai/core/session"
 import { SessionHistory } from "@opencode-ai/core/session/history"
+import { SessionStats } from "@opencode-ai/core/session/stats"
+import { SessionTitle } from "@opencode-ai/core/session/title"
+import { SessionTransfer } from "@opencode-ai/core/session/transfer"
 import { InstructionEntry } from "@opencode-ai/core/session/instruction-entry"
 import { SessionStats } from "@opencode-ai/core/session/stats"
 import { SessionSystemPrompt } from "@opencode-ai/core/session/system-prompt"
@@ -261,9 +264,14 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.rename",
         Effect.fn(function* (ctx) {
-          yield* session
-            .rename({ sessionID: ctx.params.sessionID, title: ctx.payload.title })
-            .pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+          if (ctx.payload.title) {
+            yield* session
+              .rename({ sessionID: ctx.params.sessionID, title: ctx.payload.title })
+              .pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+            return HttpApiSchema.NoContent.make()
+          }
+          const title = yield* SessionTitle.Service
+          yield* title.generate(ctx.params.sessionID)
           return HttpApiSchema.NoContent.make()
         }),
       )
@@ -711,6 +719,37 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
             messageID: ctx.params.messageID,
             message: `Message not found: ${ctx.params.messageID}`,
           })
+        }),
+      )
+      .handle(
+        "session.messageUpdate",
+        Effect.fn(function* (ctx) {
+          const message = yield* session.updateMessage({ ...ctx.params, content: ctx.payload.content }).pipe(
+            Effect.catchTag("Session.NotFoundError", missingSession),
+            Effect.catchTag(
+              "Session.MessageNotFoundError",
+              (error) =>
+                new MessageNotFoundError({
+                  sessionID: error.sessionID,
+                  messageID: error.messageID,
+                  message: `Message not found: ${error.messageID}`,
+                }),
+            ),
+            Effect.catchTag("Session.BusyError", busySession),
+            Effect.catchTag(
+              "Session.MessageNotAssistantError",
+              () => new InvalidRequestError({ message: "Only assistant messages can be updated", field: "messageID" }),
+            ),
+            Effect.catchTag(
+              "Session.MessageIncompleteError",
+              (error) => new ConflictError({ message: "Assistant message is incomplete", resource: error.messageID }),
+            ),
+            Effect.catchTag(
+              "Session.MessageToolIncompleteError",
+              () => new InvalidRequestError({ message: "Tool content must be completed", field: "content" }),
+            ),
+          )
+          return { data: message }
         }),
       )
   }),
