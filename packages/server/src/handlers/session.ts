@@ -1,24 +1,14 @@
-import { Agent } from "@opencode-ai/core/agent"
-import { CodeModeInstructions } from "@opencode-ai/core/codemode/instructions"
 import { Database } from "@opencode-ai/core/database/database"
 import { InstructionDiscovery } from "@opencode-ai/core/instruction-discovery"
-import { InstructionBuiltIns } from "@opencode-ai/core/instructions/builtins"
-import { Instructions } from "@opencode-ai/core/instructions/index"
-import { McpInstructions } from "@opencode-ai/core/mcp/instructions"
-import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor-service"
-import { ReferenceInstructions } from "@opencode-ai/core/reference/instructions"
+import { Plugin } from "@opencode-ai/core/plugin"
 import { Session } from "@opencode-ai/core/session"
+import { SessionContext } from "@opencode-ai/core/session/context"
 import { SessionHistory } from "@opencode-ai/core/session/history"
-import { SessionStats } from "@opencode-ai/core/session/stats"
-import { SessionTitle } from "@opencode-ai/core/session/title"
-import { SessionTransfer } from "@opencode-ai/core/session/transfer"
 import { InstructionEntry } from "@opencode-ai/core/session/instruction-entry"
 import { SessionStats } from "@opencode-ai/core/session/stats"
 import { SessionSystemPrompt } from "@opencode-ai/core/session/system-prompt"
+import { SessionTitle } from "@opencode-ai/core/session/title"
 import { SessionTransfer } from "@opencode-ai/core/session/transfer"
-import { SkillInstructions } from "@opencode-ai/core/skill/instructions"
-import { Tool } from "@opencode-ai/core/tool"
-import { McpTool } from "@opencode-ai/core/tool/mcp"
 import { DateTime, Effect, Stream } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
@@ -546,49 +536,18 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.systemPrompt",
         Effect.fn(function* (ctx) {
-          const info = yield* session
-            .get(ctx.params.sessionID)
-            .pipe(Effect.catchTag("Session.NotFoundError", missingSession))
-          const db = (yield* Database.Service).db
-          const agents = yield* Agent.Service
-          const builtins = yield* InstructionBuiltIns.Service
+          yield* session.get(ctx.params.sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+          const plugins = yield* Plugin.Service
+          yield* plugins.awaitActivation
+          const context = yield* SessionContext.Service
           const discovery = yield* InstructionDiscovery.Service
-          const entries = yield* InstructionEntry.Service
-          const mcpInstructions = yield* McpInstructions.Service
-          const mcpTools = yield* McpTool.Service
-          const plugins = yield* PluginSupervisor.Service
-          const referenceInstructions = yield* ReferenceInstructions.Service
-          const skillInstructions = yield* SkillInstructions.Service
-          const registry = yield* Tool.Service
-          yield* plugins.flush
-          yield* mcpTools.flush
-          const agent = yield* agents.select(info.agent)
-          if (!agent.info) return yield* missingSession(new Session.NotFoundError({ sessionID: info.id }))
-          const loaded = yield* Effect.all(
-            {
-              tools: registry.snapshot(agent.info.permissions),
-              builtins: builtins.load(info.id),
-              discovery: discovery.load(),
-              skills: skillInstructions.load(agent),
-              references: referenceInstructions.load(),
-              mcp: mcpInstructions.load(agent),
-              entries: entries.load(info.id),
-            },
-            { concurrency: "unbounded" },
+          const database = yield* Database.Service
+          const selection = yield* context.select(ctx.params.sessionID).pipe(
+            Effect.catchTag("Session.AgentNotFoundError", (error) =>
+              missingSession(new Session.NotFoundError({ sessionID: error.sessionID })),
+            ),
           )
-          const history = yield* SessionHistory.preview(
-            db,
-            info.id,
-            Instructions.combine([
-              loaded.builtins,
-              CodeModeInstructions.make(loaded.tools.codeModeCatalog),
-              loaded.discovery,
-              loaded.skills,
-              loaded.references,
-              loaded.mcp,
-              loaded.entries,
-            ]),
-          ).pipe(
+          const history = yield* SessionHistory.preview(database.db, selection.session.id, selection.instructions).pipe(
             Effect.catchTag("Instructions.InitializationBlocked", (error) => {
               const ref = `err_${crypto.randomUUID().slice(0, 8)}`
               return Effect.logError("failed to assemble session system prompt", { cause: error }).pipe(
@@ -605,10 +564,11 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
           return {
             data: {
               system: [
-                agent.info.system || SessionSystemPrompt.make(loaded.tools.definitions.map((tool) => tool.name)),
+                selection.agent.info.system ||
+                  SessionSystemPrompt.make(selection.tools.definitions.map((tool) => tool.name)),
                 history.initial,
               ].filter((part) => part.length > 0),
-              sources: Array.isArray(sources) ? sources : [],
+              sources: Array.isArray(sources) ? sources.map((file) => ({ path: file.path, content: file.content })) : [],
             },
           }
         }),

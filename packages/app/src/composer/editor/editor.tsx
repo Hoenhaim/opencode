@@ -281,25 +281,6 @@ export function ComposerEditor(props: ComposerEditorProps) {
               keybind={props.alternateKeybind ?? ["Mod", "Enter"]}
             />
           </Show>
-          <Show when={state.mode === "normal" && !view.submit.stopping() && !!view.submit.queue}>
-            <Tooltip placement="top" inactive={!props.controller.canSubmit()} value={i18n.t("ui.promptInput.queue")}>
-              <IconButton
-                data-action="composer-queue"
-                type="button"
-                disabled={!props.controller.canSubmit()}
-                tabIndex={state.mode === "normal" ? undefined : -1}
-                icon={<Icon name="bullet-list" />}
-                variant="ghost-muted"
-                class="me-1 size-7 rounded-md p-[6px] disabled:opacity-50"
-                aria-label={i18n.t("ui.promptInput.queue")}
-                onClick={(event) => {
-                  event.preventDefault()
-                  event.stopPropagation()
-                  props.controller.submit({ delivery: "queue" })
-                }}
-              />
-            </Tooltip>
-          </Show>
           <ComposerEditorSubmitButton
             mode={state.mode}
             stopping={view.submit.stopping()}

@@ -51,6 +51,11 @@ export const ModelsDevPlugin = define({
       ),
       Effect.forkScoped({ startImmediately: true }),
     )
+    yield* ctx.session.hook(
+      "model.request",
+      () => modelsDev.refresh().pipe(Effect.forkDetach, Effect.asVoid),
+      { providerID: Provider.ID.opencode },
+    )
   }),
 })
 

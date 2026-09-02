@@ -628,14 +628,15 @@ export const layer = (options?: Options) =>
           )
         : Effect.undefined
 
-      // The bundled snapshot is the boot-time floor for the catalog; the
-      // periodic fetch below still refreshes on top.
+      // The bundled snapshot is the boot-time floor for the catalog. Remote
+      // fetch happens only via refresh() — user "Update model list" or an
+      // OpenCode/Zen model request — not on layer start.
       const loadSnapshot = options?.snapshot === false ? Effect.undefined : bundledSnapshot
 
       // Best-effort: a cache-write failure must never kill catalog
       // population. The payload has outgrown some KV backends' per-value
       // limits (Durable Object SQLite caps values at 2 MB and api.json
-      // passed it in Aug 2026); a boot without a cache hit just refetches.
+      // passed it in Aug 2026); a boot without a cache hit uses the snapshot.
       const writeCache = Effect.fn("ModelsDev.writeCache")(function* (text: string, digest = bodyDigest(text)) {
         yield* kv.set(key, { updatedAt: Date.now(), digest, body: text }).pipe(
           Effect.catchCauseIf(
@@ -645,13 +646,6 @@ export const layer = (options?: Options) =>
         )
       })
 
-      const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {
-        const text = yield* fetchApi()
-        const catalog = yield* decodeCatalog(text)
-        yield* writeCache(text)
-        return catalog
-      })
-
       const populate = Effect.gen(function* () {
         const fromFile = yield* loadFromFile
         if (fromFile) return normalize(fromFile)
@@ -659,15 +653,7 @@ export const layer = (options?: Options) =>
         if (cached) return normalize(cached.catalog)
         const bundled = yield* loadSnapshot
         if (bundled) return bundled
-        if (!fetch) return []
-        const catalog = yield* lock.withPermit(
-          Effect.gen(function* () {
-            const stored = options?.file ? undefined : yield* loadFromCache()
-            if (stored) return stored.catalog
-            return yield* fetchAndWrite()
-          }),
-        )
-        return normalize(catalog)
+        return []
       }).pipe(Effect.withSpan("ModelsDev.populate"), Effect.orDie)
 
       const [cachedGet, invalidate] = yield* Effect.cachedInvalidateWithTTL(populate, Duration.infinity)
@@ -675,6 +661,7 @@ export const layer = (options?: Options) =>
       const get = (): Effect.Effect<readonly Snapshot[]> => cachedGet
 
       const refresh = Effect.fn("ModelsDev.refresh")(function* (force = false) {
+        if (!fetch) return
         yield* lock
           .withPermit(
             Effect.gen(function* () {
@@ -697,11 +684,6 @@ export const layer = (options?: Options) =>
             Effect.ignore,
           )
       })
-
-      if (fetch && !process.argv.includes("--get-yargs-completions")) {
-        // Schedule.spaced runs the effect once, then waits between completions.
-        yield* Effect.forkScoped(refresh().pipe(Effect.repeat(Schedule.spaced(ttl)), Effect.ignore))
-      }
 
       return Service.of({ get, refresh })
     }),

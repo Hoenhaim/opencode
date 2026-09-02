@@ -18,6 +18,7 @@ import { KV } from "../kv.js"
 import { Location } from "../location.js"
 import { LocationServiceMap } from "../location-service-map.js"
 import { Model } from "../model.js"
+import { ModelsDev } from "../models-dev.js"
 import { Mcp } from "../mcp/index.js"
 import { Session } from "../session.js"
 import { PersistentPty } from "../persistent-pty.js"
@@ -51,6 +52,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
   const agents = yield* Agent.Service
   const aisdk = yield* AISDK.Service
   const catalog = yield* Catalog.Service
+  const modelsDev = yield* ModelsDev.Service
   const commands = yield* Command.Service
   const bus = yield* Bus.Service
   const integration = yield* Integration.Service
@@ -193,6 +195,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
       model: {
         list: () => response(catalog.model.available()),
         default: () => response(catalog.model.default()),
+        refresh: () => Effect.flatMap(modelsDev.refresh(true), () => response(catalog.model.available())),
       },
       reload: catalog.reload,
       transform: (callback) =>
@@ -500,6 +503,7 @@ export const requirements = LayerNode.group([
   Integration.node,
   KV.node,
   Mcp.node,
+  ModelsDev.node,
   Location.node,
   Reference.node,
   Rpc.node,

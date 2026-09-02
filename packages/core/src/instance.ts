@@ -20,6 +20,7 @@ import { Location } from "./location.js"
 import { LocationMutation } from "./location-mutation.js"
 import { ModelResolver } from "./model-resolver.js"
 import { Mcp } from "./mcp/index.js"
+import { McpInstructions } from "./mcp/instructions.js"
 import { Permission } from "./permission.js"
 import { Plugin } from "./plugin.js"
 import { PluginHooks } from "./plugin/hooks.js"
@@ -84,6 +85,7 @@ const nodes = [
   FileMutation.node,
   Formatter.node,
   Mcp.node,
+  McpInstructions.node,
   Permission.node,
   Tool.node,
   ToolOutput.node,

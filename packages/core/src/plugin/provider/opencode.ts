@@ -8,6 +8,7 @@ import { Credential } from "../../credential.js"
 import { Integration } from "../../integration.js"
 import { Provider } from "../../provider.js"
 import { ConfigProvider } from "@opencode-ai/schema/config/provider"
+import { ModelsDev } from "@opencode-ai/schema/models-dev"
 import { Money } from "@opencode-ai/schema/money"
 
 const defaultServer = "https://opencode.ai/console"
@@ -111,7 +112,10 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
       draft.method.update({ integrationID: "opencode", method: { type: "key", label: "API key (service account)" } })
     })
 
-    yield* load()
+    // Do not fetch console config at plugin boot. load() hits
+    // https://opencode.ai/console/api/v2/config when a credential exists.
+    const connection = yield* ctx.integration.connection.active("opencode")
+    connected = connection !== undefined
     yield* ctx.catalog.transform((catalog) => {
       for (const [providerID, item] of Object.entries(providers ?? {})) {
         const source = catalog.provider.get(item.canonical ?? providerID)
@@ -209,6 +213,13 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
       Stream.runForEach(refresh),
       Effect.forkScoped({ startImmediately: true }),
     )
+    yield* bus.subscribe(ModelsDev.Event.Refreshed).pipe(
+      Stream.runForEach(refresh),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+    yield* ctx.session.hook("model.request", () => refresh().pipe(Effect.asVoid), {
+      providerID: Provider.ID.opencode,
+    })
   }),
 })
 
