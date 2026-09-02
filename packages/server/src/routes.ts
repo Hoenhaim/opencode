@@ -51,6 +51,7 @@ const applicationServiceNodes = [
   Bus.node,
   EventLogger.node,
   httpClient,
+  ModelsDev.node,
   Job.node,
   Project.node,
   Worktree.node,

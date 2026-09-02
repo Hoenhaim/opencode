@@ -12,6 +12,7 @@ import { ConfigProviderV1 } from "../../v1/config/provider.js"
 import { Money } from "@opencode-ai/schema/money"
 import { ConfigProviderOptionsV1 } from "../../v1/config/provider-options.js"
 import { ConfigV1 } from "../../v1/config/config.js"
+import { ModelsDev } from "@opencode-ai/schema/models-dev"
 
 const defaultServer = "https://opencode.ai/console"
 const clientID = "opencode-cli"
@@ -91,19 +92,24 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
     let connected = false
     let providers: typeof ConfigV1.Info.Type.provider | undefined
 
-    const load = Effect.fn("OpencodePlugin.load")(function* () {
+    const connect = Effect.fn("OpencodePlugin.connect")(function* () {
       const connection = yield* ctx.integration.connection.active("opencode")
-      const credential = connection
-        ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
-        : undefined
       connected = connection !== undefined
-      providers = credential
-        ? yield* fetchProviders(http, credential).pipe(
-            Effect.catch((cause) =>
-              Effect.logWarning("failed to load OpenCode provider config", { cause }).pipe(Effect.as(undefined)),
-            ),
-          )
-        : undefined
+      if (!connection) return undefined
+      return yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
+    })
+
+    const load = Effect.fn("OpencodePlugin.load")(function* () {
+      const credential = yield* connect()
+      if (!credential) {
+        providers = undefined
+        return
+      }
+      providers = yield* fetchProviders(http, credential).pipe(
+        Effect.catch((cause) =>
+          Effect.logWarning("failed to load OpenCode provider config", { cause }).pipe(Effect.as(undefined)),
+        ),
+      )
     })
 
     yield* ctx.integration.transform((draft) => {
@@ -114,7 +120,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
       draft.method.update({ integrationID: "opencode", method: { type: "key", label: "API key (service account)" } })
     })
 
-    yield* load()
+    yield* connect()
     yield* ctx.catalog.transform((catalog) => {
       for (const [providerID, item] of Object.entries(providers ?? {})) {
         catalog.provider.update(providerID, (provider) => {
@@ -195,6 +201,10 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
     const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.catalog.reload())))
     yield* bus.subscribe(Credential.Event.Switched).pipe(
       Stream.filter((event) => event.data.integrationID === Integration.ID.make("opencode")),
+      Stream.runForEach(refresh),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+    yield* bus.subscribe(ModelsDev.Event.Refreshed).pipe(
       Stream.runForEach(refresh),
       Effect.forkScoped({ startImmediately: true }),
     )
