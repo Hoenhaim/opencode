@@ -48,6 +48,25 @@ const layer = Layer.effect(
     const cache = yield* RepositoryCache.Service
     const scope = yield* Scope.Scope
     const materialized = new Map<string, Info>()
+    const refresh = Effect.fn("Reference.refresh")(function* () {
+      yield* Effect.forEach(
+        Array.from(materialized.values()),
+        (reference) =>
+          Effect.gen(function* () {
+            if (reference.source.type !== "git") return
+            yield* cache.ensure({
+              reference: Repository.parseRemote(reference.source.repository),
+              branch: reference.source.branch,
+              refresh: "daily",
+            })
+          }).pipe(
+            Effect.catchCause((cause) =>
+              Effect.logWarning("failed to materialize reference", { name: reference.name, cause }),
+            ),
+          ),
+        { concurrency: 4, discard: true },
+      )
+    })
     const state = State.create<Data, Draft>({
       name: "reference",
       initial: () => ({ sources: new Map() }),
@@ -60,17 +79,14 @@ const layer = Layer.effect(
         Effect.gen(function* () {
           materialized.clear()
           for (const [name, source] of draft.list()) {
+            const info = {
+              name,
+              source,
+              ...(source.description === undefined ? {} : { description: source.description }),
+              ...(source.hidden === undefined ? {} : { hidden: source.hidden }),
+            }
             if (source.type === "local") {
-              materialized.set(
-                name,
-                Info.make({
-                  name,
-                  path: source.path,
-                  ...(source.description === undefined ? {} : { description: source.description }),
-                  ...(source.hidden === undefined ? {} : { hidden: source.hidden }),
-                  source,
-                }),
-              )
+              materialized.set(name, Info.make({ ...info, path: source.path }))
               continue
             }
             const repository = Repository.parse(source.repository)
@@ -85,27 +101,18 @@ const layer = Layer.effect(
             materialized.set(
               name,
               Info.make({
-                name,
+                ...info,
                 path: AbsolutePath.make(Repository.cachePath(global.repos, repository, source.branch)),
-                ...(source.description === undefined ? {} : { description: source.description }),
-                ...(source.hidden === undefined ? {} : { hidden: source.hidden }),
-                source,
               }),
             )
-            yield* cache.ensure({ reference: repository, branch: source.branch, refresh: true }).pipe(
-              Effect.catchCause((cause) =>
-                Effect.logWarning("failed to materialize reference", {
-                  name,
-                  repository: source.repository,
-                  cause,
-                }),
-              ),
-              Effect.forkIn(scope),
-            )
           }
+          yield* refresh().pipe(Effect.forkIn(scope))
           yield* bus.publish(Reference.Event.Updated, {})
         }),
     })
+
+    // Check independently of session activity; the shared cache throttles Git work daily.
+    yield* Effect.sleep("1 hour").pipe(Effect.andThen(refresh()), Effect.forever, Effect.forkScoped)
 
     return Service.of({
       transform: state.transform,

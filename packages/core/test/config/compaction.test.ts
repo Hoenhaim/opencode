@@ -40,13 +40,12 @@ const it = testEffect(
   Layer.merge(
     config,
     AppNodeBuilder.build(LayerNode.group([SessionCompaction.node, SessionModelRequest.node, Config.node, Bus.node]), [
-      [
-        llmClient,
+      llmClient.replace(
         Layer.mock(LLMClient.Service)({
           stream: () => Stream.make(LLMEvent.textDelta({ id: "summary", text: "summary" })),
         }),
-      ],
-      [Config.node, config],
+      ),
+      Config.node.replace(config),
     ]),
   ),
 )
@@ -146,10 +145,8 @@ const session = Session.Info.make({
   time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
   location: Location.Ref.make({ directory: AbsolutePath.make("/tmp") }),
 })
-const input = (tokens: number) => ({
-  session,
-  resolved,
-  messages: [
+const input = (tokens: number) => {
+  const messages = [
     Schema.decodeUnknownSync(SessionMessage.Assistant)({
       id: SessionMessage.ID.make("msg_compaction_config"),
       type: "assistant",
@@ -159,7 +156,20 @@ const input = (tokens: number) => ({
       tokens: { input: tokens, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
       time: { created: 0, completed: 0 },
     }),
-  ],
-})
+  ]
+  return {
+    session,
+    resolved,
+    messages,
+    context: {
+      session,
+      model: resolved,
+      messages,
+      agent: { id: Agent.defaultID, info: Agent.Info.default(Agent.defaultID) },
+      initial: "",
+      tools: { definitions: [], execute: () => Effect.die("unused") },
+    },
+  }
+}
 const bufferedInput = input(85_000)
 const nearInput = input(95_000)

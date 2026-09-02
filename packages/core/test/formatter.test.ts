@@ -6,7 +6,7 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Bus } from "@opencode-ai/core/bus"
 import { Database } from "@opencode-ai/core/database/database"
 import { LocationServiceMap } from "@opencode-ai/core/location-services"
-import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
+import { Plugin } from "@opencode-ai/core/plugin"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Info } from "@opencode-ai/schema/config"
@@ -20,7 +20,7 @@ import { testEffect } from "./lib/effect"
 
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]), [
-    [Global.node, tempGlobalLayer],
+    Global.node.replace(tempGlobalLayer),
   ]),
 )
 type ConfigInput = typeof Info.Encoded
@@ -43,8 +43,8 @@ function withFormatter<A, E, R>(
     ).pipe(
       Effect.andThen(
         Effect.gen(function* () {
-          const plugins = yield* PluginSupervisor.Service
-          yield* plugins.flush
+          const plugins = yield* Plugin.Service
+          yield* plugins.awaitActivation
           return yield* body(yield* Formatter.Service, directory)
         }).pipe(
           Effect.scoped,
@@ -58,6 +58,34 @@ function withFormatter<A, E, R>(
 }
 
 describe("Formatter", () => {
+  ;[
+    { file: "test.match", extension: ".match", matches: true },
+    { file: "test.other", extension: ".match", matches: false },
+    { file: "test.MATCH", extension: ".match", matches: false },
+    { file: "test.MATCH", extension: ".MATCH", matches: true },
+    { file: ".match", extension: ".match", matches: false },
+    { file: ".match", extension: "", matches: true },
+    { file: "README", extension: ".match", matches: false },
+    { file: "README", extension: "", matches: true },
+    { file: "test.part.match", extension: ".match", matches: true },
+    { file: "test.part.match", extension: ".part.match", matches: false },
+  ].forEach((entry) =>
+    it.live(`matches ${entry.file} against ${JSON.stringify(entry.extension)}: ${entry.matches}`, () =>
+      withFormatter(
+        {
+          matching: {
+            command: [process.execPath, "-e", "process.exit(0)", "$FILE"],
+            extensions: [entry.extension],
+          },
+        },
+        (formatter, directory) =>
+          Effect.gen(function* () {
+            expect(yield* formatter.file(path.join(directory, entry.file))).toBe(entry.matches)
+          }),
+      ),
+    ),
+  )
+
   it.live("does not run formatters marked as disabled in config", () =>
     withFormatter(
       {

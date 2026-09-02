@@ -7,7 +7,6 @@ import { Bus } from "@opencode-ai/core/bus"
 import { ConfigInstructionPlugin } from "@opencode-ai/core/config/plugin/instruction"
 import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 import { InstructionDiscovery } from "@opencode-ai/core/instruction-discovery"
-import { Instructions } from "@opencode-ai/core/instructions/index"
 import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { FSUtil } from "@opencode-ai/util/fs-util"
@@ -34,19 +33,18 @@ const instructionLayer = (input: {
     AppNodeBuilder.build(
       LayerNode.group([InstructionDiscovery.node, Bus.node, FSUtil.node, Global.node, Location.node, Watcher.node]),
       [
-        [InstructionDiscovery.node, InstructionDiscovery.configured({ project: input.project })],
-        [
-          Global.node,
+        InstructionDiscovery.node.replace(InstructionDiscovery.configured({ project: input.project })),
+        Global.node.replace(
           input.config || input.home
             ? Global.layerWith({
                 ...(input.config ? { config: input.config } : {}),
                 ...(input.home ? { home: input.home } : {}),
               })
             : tempGlobalLayer,
-        ],
-        [Location.node, input.locationServiceLayer],
-        [Watcher.node, watcher],
-        ...(input.filesystemLayer ? [[FSUtil.node, input.filesystemLayer] as const] : []),
+        ),
+        Location.node.replace(input.locationServiceLayer),
+        Watcher.node.replace(watcher),
+        ...(input.filesystemLayer ? [FSUtil.node.replace(input.filesystemLayer)] : []),
       ],
     ),
     watcher,

@@ -135,6 +135,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 title: ctx.payload.title,
                 agent: ctx.payload.agent,
                 model: ctx.payload.model,
+                metadata: ctx.payload.metadata,
                 location: ctx.payload.location ?? { directory: AbsolutePath.make(process.cwd()) },
               })
               .pipe(Effect.orDie),
@@ -151,6 +152,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 location: ctx.payload.location ?? { directory: AbsolutePath.make(process.cwd()) },
               })
               .pipe(
+                Effect.catchTag("Session.NotFoundError", missingSession),
                 Effect.catchTag(
                   "SessionTransfer.ImportConflictError",
                   (error) =>

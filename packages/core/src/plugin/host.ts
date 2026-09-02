@@ -3,7 +3,8 @@ export * as PluginHost from "./host.js"
 import { Plugin } from "@opencode-ai/plugin/effect"
 import type { IntegrationMethodRegistration } from "@opencode-ai/plugin/effect/integration"
 import { EventManifest } from "@opencode-ai/schema/event-manifest"
-import { Mcp } from "@opencode-ai/schema/mcp"
+import type { Event } from "@opencode-ai/schema/event"
+import { ServerConfig } from "@opencode-ai/schema/mcp"
 import { App } from "../app.js"
 import { Effect, Schema, Stream } from "effect"
 import { Agent } from "../agent.js"
@@ -15,12 +16,14 @@ import { Bus } from "../bus.js"
 import { Integration } from "../integration.js"
 import { KV } from "../kv.js"
 import { Location } from "../location.js"
+import { LocationServiceMap } from "../location-service-map.js"
 import { Model } from "../model.js"
-import { MCP } from "../mcp/index.js"
-import { ModelsDev } from "../models-dev.js"
-import { PluginRuntime } from "./runtime.js"
+import { Mcp } from "../mcp/index.js"
+import { Session } from "../session.js"
+import { PersistentPty } from "../persistent-pty.js"
 import { Provider } from "../provider.js"
 import { Reference } from "../reference.js"
+import { Rpc } from "../rpc.js"
 import { AbsolutePath, type DeepMutable } from "../schema.js"
 import { Skill } from "../skill.js"
 import { Tool } from "../tool.js"
@@ -31,9 +34,19 @@ import { Generate } from "../generate.js"
 import { Permission } from "../permission.js"
 import { PluginHooks } from "./hooks.js"
 import type { Interface } from "../plugin.js"
+import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 
 const mutable = <T>(value: T) => value as DeepMutable<T>
-export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, pluginID: string = "test") {
+type RpcEvent = Event.Payload & {
+  readonly type: `rpc.${string}`
+  readonly location: Location.Ref
+  readonly data: Readonly<Record<string, unknown>>
+}
+const isRpcEvent = (event: Event.Payload): event is RpcEvent => event.type.startsWith("rpc.")
+export const make = Effect.fn("PluginHost.make")(function* (
+  plugin: Pick<Interface, "list">,
+  pluginID: string = "test",
+) {
   const app = yield* App.Metadata
   const agents = yield* Agent.Service
   const aisdk = yield* AISDK.Service
@@ -42,10 +55,10 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
   const bus = yield* Bus.Service
   const integration = yield* Integration.Service
   const kv = yield* KV.Service
-  const mcp = yield* MCP.Service
-  const modelsDev = yield* ModelsDev.Service
+  const mcp = yield* Mcp.Service
   const location = yield* Location.Service
   const reference = yield* Reference.Service
+  const rpc = yield* Rpc.Service
   const skill = yield* Skill.Service
   const tools = yield* Tool.Service
   const vcs = yield* Vcs.Service
@@ -53,7 +66,9 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
   const generate = yield* Generate.Service
   const permission = yield* Permission.Service
   const hooks = yield* PluginHooks.Service
-  const runtime = yield* PluginRuntime.Service
+  const sessions = yield* Session.Service
+  const persistentPty = yield* PersistentPty.Service
+  const locations = yield* LocationServiceMap.Service
   const locationInfo = () =>
     new Location.Info({
       directory: location.directory,
@@ -73,16 +88,33 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
   const response = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     effect.pipe(Effect.map((data) => ({ location: locationInfo(), data })))
 
-  return {
+  const listAgents = Effect.fn("PluginHost.listAgents")((ref: Location.Ref) =>
+    Effect.gen(function* () {
+      const location = yield* Location.Service
+      const agents = yield* Agent.Service
+      return {
+        location: new Location.Info({
+          directory: location.directory,
+          workspaceID: location.workspaceID,
+          project: location.project,
+        }),
+        data: yield* agents.list(),
+      }
+    }).pipe(Effect.provide(locations.get(ref)), Effect.orDie),
+  )
+
+  // Keep the instance graph's inferred types independent of Session handles.
+  const context: Plugin.Context = {
     app,
     location: locationInfo(),
     options: {},
+    rpc: Object.assign(rpc.client, { register: rpc.register }),
     agent: {
       get: (input) => {
         const ref = locationRef(input)
         const output =
           ref && !isCurrentLocation(ref)
-            ? runtime.location.agent.list(ref).pipe(
+            ? listAgents(ref).pipe(
                 Effect.map((result) => ({
                   ...result,
                   data: result.data.find((agent) => agent.id === input.agentID),
@@ -99,8 +131,8 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
       },
       list: (input) => {
         const ref = locationRef(input)
-        if (ref && !isCurrentLocation(ref)) return runtime.location.agent.list(ref)
-        return agents.list().pipe(Effect.map((data) => ({ location: locationInfo(), data })))
+        if (ref && !isCurrentLocation(ref)) return listAgents(ref)
+        return response(agents.list())
       },
       reload: agents.reload,
       transform: (callback) =>
@@ -161,7 +193,6 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
       model: {
         list: () => response(catalog.model.available()),
         default: () => response(catalog.model.default()),
-        refresh: () => Effect.flatMap(modelsDev.refresh(true), () => response(catalog.model.available())),
       },
       reload: catalog.reload,
       transform: (callback) =>
@@ -194,7 +225,20 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
       transform: commands.transform,
     },
     event: {
-      subscribe: () => bus.subscribe().pipe(Stream.filter(EventManifest.isServer)),
+      subscribe: () =>
+        bus
+          .subscribe()
+          .pipe(
+            Stream.filter(
+              (event): event is EventManifest.ServerEvent | RpcEvent =>
+                EventManifest.isServer(event) || isRpcEvent(event),
+            ),
+          ),
+    },
+    experimental: {
+      terminal: {
+        read: (input) => persistentPty.read(input.sessionID, input.lines),
+      },
     },
     generate: {
       text: (input) => generate.text(input).pipe(Effect.map((text) => ({ text }))),
@@ -289,7 +333,19 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
     mcp: {
       list: (input) => {
         const ref = locationRef(input)
-        if (ref && !isCurrentLocation(ref)) return runtime.location.mcp.list(ref)
+        if (ref && !isCurrentLocation(ref))
+          return Effect.gen(function* () {
+            const location = yield* Location.Service
+            const mcp = yield* Mcp.Service
+            return {
+              location: new Location.Info({
+                directory: location.directory,
+                workspaceID: location.workspaceID,
+                project: location.project,
+              }),
+              data: yield* mcp.servers(),
+            }
+          }).pipe(Effect.provide(locations.get(ref)))
         return response(mcp.servers())
       },
       reload: mcp.reload,
@@ -298,7 +354,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
           callback({
             list: () => draft.list().map(([name, config]) => [name, mutable(config)]),
             get: (name) => mutable(draft.get(name)),
-            set: (name, config) => draft.set(name, Schema.decodeUnknownSync(Mcp.ServerConfig)(config)),
+            set: (name, config) => draft.set(name, Schema.decodeUnknownSync(ServerConfig)(config)),
             update: draft.update,
             remove: draft.remove,
           })
@@ -367,9 +423,10 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
     },
     vcs: {
       get: () => response(vcs.info()),
+      base: () => response(vcs.base()),
       branches: (input) => response(vcs.branches({ search: input?.search, limit: input?.limit })),
       status: () => response(vcs.status()),
-      diff: (input) => response(vcs.diff(input.mode, { context: input.context })),
+      diff: (input) => response(vcs.diff(input.mode, { context: input.context, base: input.base })),
       transform: vcs.transform,
       reload: vcs.reload,
     },
@@ -405,7 +462,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
     session: {
       hook: (name, callback, options) => hooks.register("session", name, callback, options),
       create: (input) =>
-        runtime.session.create({
+        sessions.create({
           id: input?.id,
           title: input?.title,
           agent: input?.agent,
@@ -413,24 +470,50 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
           location:
             input?.location ?? Location.Ref.make({ directory: location.directory, workspaceID: location.workspaceID }),
         }),
-      get: (input) => runtime.session.get(input.sessionID),
-      switchAgent: runtime.session.switchAgent,
-      switchModel: runtime.session.switchModel,
-      prompt: runtime.session.prompt,
-      generate: (input) => runtime.session.generate(input).pipe(Effect.map((text) => ({ text }))),
-      command: runtime.session.command,
-      rename: runtime.session.rename,
-      move: runtime.session.move,
-      synthetic: runtime.session.synthetic,
+      get: (input) => sessions.get(input.sessionID),
+      switchAgent: sessions.switchAgent,
+      switchModel: sessions.switchModel,
+      prompt: sessions.prompt,
+      generate: (input) => sessions.generate(input).pipe(Effect.map((text) => ({ text }))),
+      command: sessions.command,
+      rename: sessions.rename,
+      move: sessions.move,
+      synthetic: sessions.synthetic,
       interrupt: (input) =>
-        runtime.session
+        sessions
           .interrupt(input.sessionID, { continue: input.continue })
           .pipe(Effect.map((interrupted) => ({ interrupted }))),
-      wait: (input) => runtime.session.wait(input.sessionID),
-      context: (input) => runtime.session.context(input.sessionID),
+      wait: (input) => sessions.wait(input.sessionID),
+      context: (input) => sessions.context(input.sessionID),
     },
-  } satisfies Plugin.Context
+  }
+  return context
 })
+
+export const requirements = LayerNode.group([
+  App.node,
+  Agent.node,
+  AISDK.node,
+  Catalog.node,
+  Command.node,
+  Bus.node,
+  Integration.node,
+  KV.node,
+  Mcp.node,
+  Location.node,
+  Reference.node,
+  Rpc.node,
+  Skill.node,
+  Tool.node,
+  Vcs.node,
+  WebSearch.node,
+  Generate.node,
+  Permission.node,
+  PluginHooks.node,
+  Session.node,
+  PersistentPty.node,
+  LocationServiceMap.node,
+])
 
 export function storage(kv: KV.Interface, pluginID: string): Plugin.Context["storage"] {
   const namespace = `plugin:${pluginID

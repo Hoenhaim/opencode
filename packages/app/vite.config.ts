@@ -1,10 +1,15 @@
 import { fileURLToPath } from "node:url"
 import { defineConfig } from "vite"
-import desktopPlugin from "./vite.js"
+import desktopPlugin, { channel } from "./vite.js"
+import { icons } from "./vite.icons"
 import { serviceWorker } from "./vite.pwa"
 
 export default defineConfig({
-  plugins: [desktopPlugin, serviceWorker(fileURLToPath(new URL("./dist", import.meta.url)))] as any,
+  plugins: [
+    desktopPlugin,
+    icons(channel),
+    serviceWorker(fileURLToPath(new URL("./dist", import.meta.url))),
+  ] as any,
   server: {
     host: "0.0.0.0",
     allowedHosts: true,

@@ -54,9 +54,9 @@ describe("Snapshot", () => {
             },
           })
           const layer = AppNodeBuilder.build(Snapshot.node, [
-            [Location.node, Layer.succeed(Location.Service, location)],
-            [Global.node, Global.layerWith({ data: tmp.path, config: path.join(tmp.path, "config") })],
-            [Git.node, Layer.succeed(Git.Service, instrumented)],
+            Location.node.replace(Layer.succeed(Location.Service, location)),
+            Global.node.replace(Global.layerWith({ data: tmp.path, config: path.join(tmp.path, "config") })),
+            Git.node.replace(Layer.succeed(Git.Service, instrumented)),
           ])
 
           yield* Effect.gen(function* () {
@@ -122,6 +122,31 @@ describe("Snapshot", () => {
             expect(yield* read(path.join(location, "added.txt"))).toBe("added\n")
             expect(yield* read(path.join(project, "outside.txt"))).toBe("changed outside\n")
           }).pipe(Effect.provide(layer))
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  testEffect(Layer.empty).live("treats fatal ignore checks as unavailable captures", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          const project = path.join(tmp.path, "project")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(project)
+            await Bun.write(path.join(project, "tracked.txt"), "one\n")
+            await initGit(project)
+          })
+          yield* Effect.gen(function* () {
+            const snapshot = yield* Snapshot.Service
+            expect(yield* snapshot.capture()).toBeDefined()
+            yield* Effect.promise(async () => {
+              await Bun.write(path.join(project, "tracked.txt"), "two\n")
+              await Bun.write(path.join(project, ".git", "config"), "[broken\n")
+            })
+            expect(yield* snapshot.capture()).toBeUndefined()
+          }).pipe(Effect.provide(snapshotLayer(tmp.path, project)))
         }),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),
@@ -214,8 +239,8 @@ describe("Snapshot", () => {
 
 function snapshotLayer(data: string, directory: string) {
   return AppNodeBuilder.build(Snapshot.node, [
-    [Location.node, Location.boundNode(Location.Ref.make({ directory: AbsolutePath.make(directory) }))],
-    [Global.node, Global.layerWith({ data, config: path.join(data, "config") })],
+    Location.node.replace(Location.boundNode(Location.Ref.make({ directory: AbsolutePath.make(directory) }))),
+    Global.node.replace(Global.layerWith({ data, config: path.join(data, "config") })),
   ])
 }
 

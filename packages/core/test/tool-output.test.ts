@@ -18,12 +18,13 @@ const withStore = <A, E, R>(
     Effect.promise(() => tmpdir()),
     (tmp) => {
       const layer = AppNodeBuilder.build(LayerNode.group([ToolOutput.node, FSUtil.node]), [
-        [Global.node, Global.layerWith({ data: tmp.path })],
+        Global.node.replace(Global.layerWith({ data: tmp.path })),
       ])
       return Effect.gen(function* () {
         const output = yield* ToolOutput.Service
+        const fs = yield* FSUtil.Service
         if (limits) yield* output.transform((draft) => draft.configure(limits))
-        return yield* body(output, yield* FSUtil.Service, tmp.path)
+        return yield* body(output, fs, tmp.path)
       }).pipe(Effect.provide(layer))
     },
     (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
