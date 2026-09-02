@@ -15,7 +15,10 @@ export interface Interface {
   readonly relaunch: () => void
   readonly prepareToRestart: Effect.Effect<void>
   readonly consumeInitialDeepLinks: () => string[]
-  readonly createWindow: () => BrowserWindow
+  readonly createWindow: (
+    id?: string,
+    bounds?: { x: number; y: number; width: number; height: number },
+  ) => BrowserWindow
   readonly restoreWindows: () => BrowserWindow[]
 }
 

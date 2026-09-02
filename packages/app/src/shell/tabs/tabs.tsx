@@ -21,6 +21,7 @@ import {
 import { appendPrompt, promptLength } from "@/composer/prompt-parts"
 import { TabStorage } from "./schema"
 import { useCurrentRoute } from "@/shell/state/layout"
+import { canMoveTabToNewWindow, serializeWindowTabSeed, windowTabStorageName, writeWindowTabSeed } from "./tear-off"
 
 export type SessionTab = typeof TabStorage.Session.Type
 export type DraftTab = typeof TabStorage.Draft.Type
@@ -366,6 +367,35 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         if (!tab) return
         if (tab.type === "session") updateClosed((stack) => pushClosedTab(stack, tab, index))
         removeTab(index)
+      },
+      async moveToNewWindow(
+        index: number,
+        placement: "cursor" | "offset",
+        opts?: { follow?: boolean; remove?: boolean },
+      ) {
+        const tab = store[index]
+        if (!tab) return
+        if (platform.platform !== "desktop" || !platform.createWindow || !platform.storage) return
+        if (
+          !canMoveTabToNewWindow({
+            tabCount: store.length,
+            pending: tab.type === "session" && !!pending[tabKey(tab)],
+          })
+        ) {
+          return
+        }
+
+        const key = tabKey(tab)
+        const id = uuid()
+        // Seed the destination window store before creating it so the new
+        // renderer loads this tab instead of an empty strip.
+        await writeWindowTabSeed(
+          platform.storage(windowTabStorageName(id)),
+          serializeWindowTabSeed({ tab, key, info: info[key], panes: panes[key] }),
+        )
+        await platform.createWindow({ id, placement, url: tabHref(tab), follow: opts?.follow })
+        if (opts?.remove !== false) removeTab(index)
+        return id
       },
       reopenClosedTab() {
         if (!closedReady()) {

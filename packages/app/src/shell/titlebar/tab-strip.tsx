@@ -3,20 +3,27 @@ import { createStore } from "solid-js/store"
 import { DragDropProvider, PointerSensor } from "@dnd-kit/solid"
 import { isSortable, useSortable } from "@dnd-kit/solid/sortable"
 import { Accessibility, AutoScroller, Feedback, PointerActivationConstraints } from "@dnd-kit/dom"
-import { RestrictToHorizontalAxis, RestrictToVerticalAxis } from "@dnd-kit/abstract/modifiers"
-import { RestrictToElement } from "@dnd-kit/dom/modifiers"
 import { arrayMove } from "@dnd-kit/helpers"
-import { tabHref, tabKey, type SessionTab, type Tab } from "@/shell/tabs/tabs"
+import { tabHref, tabKey, useTabs, type SessionTab, type Tab } from "@/shell/tabs/tabs"
+import { usePlatform } from "@/runtime/platform/platform"
 import { ServerConnection } from "@/runtime/server/registry"
 import { DraftTabItem, TabNavItem } from "@/shell/titlebar/tab-nav"
 import { useGlobal, useServerCtx, type ServerCtx } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useCommand } from "@/shell/commands/command"
-import { useTabs } from "@/shell/tabs/tabs"
 import { createTabComposerState } from "@/composer/persistence"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { showToast } from "@/shell/notifications/toast"
-import { canStartTabDrag, isTabCloseTarget } from "./tab-gesture"
+import { canMoveTabToNewWindow } from "@/shell/tabs/tear-off"
+import { createTabDragGhost, moveTabDragGhost, removeTabDragGhost, setTabDragging } from "./tab-drag-ghost"
+import {
+  canStartTabDrag,
+  isPointerOnTabBar,
+  isPointerOutsideWindow,
+  isTabCloseTarget,
+  nextTearOffDetached,
+} from "./tab-gesture"
+import { restrictTabDragToStrip } from "./tab-strip-modifier"
 import { adjacentTabKey, mergeVisibleTabOrder } from "./tab-order"
 import type { SessionInfo } from "@opencode-ai/client/promise"
 
@@ -32,6 +39,9 @@ function SessionTabSlot(props: {
   onRename: (title: string) => Promise<void>
   onNavigate: (element: HTMLDivElement) => void
   onClose: () => void
+  onMoveToNewWindow?: () => void
+  moveToNewWindowDisabled?: boolean
+  tearOff?: boolean
 }) {
   const sortable = useSortable({
     get id() {
@@ -50,6 +60,7 @@ function SessionTabSlot(props: {
       data-tab-key={props.id}
       data-active={props.active}
       data-orientation={props.orientation}
+      data-tear-off={props.tearOff && sortable.isDragSource() ? "true" : undefined}
       class="relative flex"
       classList={{
         "w-56 min-w-7 max-w-56 flex-shrink": props.orientation === "horizontal",
@@ -68,6 +79,8 @@ function SessionTabSlot(props: {
         onRename={props.onRename}
         onNavigate={() => props.onNavigate(ref)}
         onClose={props.onClose}
+        onMoveToNewWindow={props.onMoveToNewWindow}
+        moveToNewWindowDisabled={props.moveToNewWindowDisabled}
         active={props.active}
         dragging={sortable.isDragSource()}
         orientation={props.orientation}
@@ -86,6 +99,9 @@ function SessionTabEntry(props: {
   onVisibleChange: (visible: boolean) => void
   onNavigate: (element: HTMLDivElement) => void
   onClose: () => void
+  onMoveToNewWindow?: () => void
+  moveToNewWindowDisabled?: boolean
+  tearOff?: boolean
 }) {
   const tabs = useTabs()
   const language = useLanguage()
@@ -178,6 +194,9 @@ function SessionTabEntry(props: {
         onRename={rename}
         onNavigate={props.onNavigate}
         onClose={props.onClose}
+        onMoveToNewWindow={props.onMoveToNewWindow}
+        moveToNewWindowDisabled={props.moveToNewWindowDisabled}
+        tearOff={props.tearOff}
       />
     </Show>
   )
@@ -192,6 +211,9 @@ function DraftTabSlot(props: {
   title: string
   onNavigate: (element: HTMLDivElement) => void
   onClose: () => void
+  onMoveToNewWindow?: () => void
+  moveToNewWindowDisabled?: boolean
+  tearOff?: boolean
 }) {
   const sortable = useSortable({
     get id() {
@@ -210,6 +232,7 @@ function DraftTabSlot(props: {
       data-tab-key={props.id}
       data-active={props.active}
       data-orientation={props.orientation}
+      data-tear-off={props.tearOff && sortable.isDragSource() ? "true" : undefined}
       class="relative flex"
       classList={{
         "w-56 min-w-7 max-w-56 flex-shrink": props.orientation === "horizontal",
@@ -224,6 +247,8 @@ function DraftTabSlot(props: {
         title={props.title}
         onNavigate={() => props.onNavigate(ref)}
         onClose={props.onClose}
+        onMoveToNewWindow={props.onMoveToNewWindow}
+        moveToNewWindowDisabled={props.moveToNewWindowDisabled}
         active={props.active}
         dragging={sortable.isDragSource()}
         orientation={props.orientation}
@@ -239,13 +264,31 @@ export function TitlebarTabStrip(props: {
   onNavigate: (tab: Tab, el?: HTMLDivElement) => void
   onClose: (tab: Tab) => void
   onReorder: (keys: string[]) => void
+  onMoveToNewWindow?: (tab: Tab, placement: "cursor" | "offset") => void
 }) {
   const global = useGlobal()
   const language = useLanguage()
   const command = useCommand()
+  const tabs = useTabs()
+  const platform = usePlatform()
   const vertical = () => props.orientation === "vertical"
   let listRef!: HTMLDivElement
+  const drag = {
+    x: 0,
+    y: 0,
+    grabX: 0,
+    grabY: 0,
+    detached: false,
+    enabled: false,
+    followID: undefined as string | undefined,
+    followPending: false,
+    live: false,
+    tab: undefined as Tab | undefined,
+    ghost: undefined as HTMLElement | undefined,
+    stop: undefined as undefined | (() => void),
+  }
   const [visibility, setVisibility] = createStore<Record<string, boolean>>({})
+  const [tearOff, setTearOff] = createStore({ detached: false })
   const visibleTabs = createMemo(() => props.tabs.filter((tab) => tab.type === "draft" || visibility[tabKey(tab)]))
   const visibleTabIds = () => visibleTabs().map(tabKey)
 
@@ -275,19 +318,35 @@ export function TitlebarTabStrip(props: {
     if (next) props.onNavigate(next)
   }
 
+  function moveDisabled(tab: Tab) {
+    return !canMoveTabToNewWindow({
+      tabCount: props.tabs.length,
+      pending: tab.type === "session" && !!tabs.pendingSession(tab.server, tab.sessionId),
+    })
+  }
+
+  onCleanup(() => {
+    drag.stop?.()
+    removeTabDragGhost(drag.ghost)
+    setTabDragging(false)
+  })
+
   return (
     <div
       data-slot={vertical() ? "vertical-tabs" : "titlebar-tabs"}
       data-orientation={vertical() ? "vertical" : "horizontal"}
       class="relative min-w-0"
-      classList={{ "min-h-0 overflow-hidden": vertical() }}
+      classList={{ "min-h-0 overflow-hidden": vertical() && !tearOff.detached }}
     >
       <div
         data-slot={vertical() ? "vertical-tabs-scroll" : "titlebar-tabs-scroll"}
         class="flex min-w-0 no-scrollbar [app-region:no-drag]"
         classList={{
-          "flex-row items-center gap-1.5 overflow-x-auto": !vertical(),
-          "max-h-full flex-col overflow-y-auto overflow-x-hidden": vertical(),
+          "flex-row items-center gap-1.5": !vertical(),
+          "overflow-x-auto": !vertical() && !tearOff.detached,
+          "overflow-visible": tearOff.detached,
+          "max-h-full flex-col": vertical(),
+          "overflow-y-auto overflow-x-hidden": vertical() && !tearOff.detached,
         }}
       >
         <DragDropProvider
@@ -301,8 +360,11 @@ export function TitlebarTabStrip(props: {
             }),
           ]}
           modifiers={[
-            vertical() ? RestrictToVerticalAxis : RestrictToHorizontalAxis,
-            RestrictToElement.configure({ element: () => listRef }),
+            restrictTabDragToStrip({
+              detached: () => drag.detached,
+              orientation: () => (vertical() ? "vertical" : "horizontal"),
+              element: () => listRef,
+            }),
           ]}
           plugins={(defaults) => [
             ...defaults.filter((plugin) => plugin !== Accessibility),
@@ -311,16 +373,133 @@ export function TitlebarTabStrip(props: {
           ]}
           onDragStart={(event) => {
             const source = event.operation.source
-            if (!source) return
-            const tab = props.tabs.find((item) => tabKey(item) === source.id.toString())
+            const origin = source?.element?.getBoundingClientRect()
+            const activator = event.operation.activatorEvent
+            const pointerX = activator instanceof PointerEvent ? activator.clientX : origin?.left ?? 0
+            const pointerY = activator instanceof PointerEvent ? activator.clientY : origin?.top ?? 0
+            drag.x = pointerX
+            drag.y = pointerY
+            drag.grabX = origin ? pointerX - origin.left : 0
+            drag.grabY = origin ? pointerY - origin.top : 0
+            drag.detached = false
+            drag.followID = undefined
+            drag.followPending = false
+            drag.live = true
+            setTearOff("detached", false)
+            setTabDragging(true)
+            const tab = source ? props.tabs.find((item) => tabKey(item) === source.id.toString()) : undefined
+            drag.tab = tab
+            drag.enabled = !!tab && !!props.onMoveToNewWindow && !moveDisabled(tab)
+            const move = (pointer: PointerEvent) => {
+              drag.x = pointer.clientX
+              drag.y = pointer.clientY
+              const orientation = vertical() ? "vertical" : "horizontal"
+              const onBar = isPointerOnTabBar(drag.x, drag.y, orientation)
+              const outside = isPointerOutsideWindow(drag.x, drag.y)
+              const currentTab = drag.tab
+              if (outside && drag.enabled && currentTab && !drag.followID && !drag.followPending) {
+                const index = props.tabs.findIndex((item) => tabKey(item) === tabKey(currentTab))
+                if (index !== -1) {
+                  drag.followPending = true
+                  void tabs
+                    .moveToNewWindow(index, "cursor", { follow: true, remove: false })
+                    .then((id) => {
+                      drag.followPending = false
+                      if (!id) return
+                      if (!drag.live) {
+                        if (isPointerOnTabBar(drag.x, drag.y, orientation)) {
+                          void platform.closeWindow?.(id)
+                          return
+                        }
+                        void platform.stopWindowFollow?.(id)
+                        if (index !== -1) tabs.removeTab(index)
+                        return
+                      }
+                      drag.followID = id
+                      removeTabDragGhost(drag.ghost)
+                      drag.ghost = undefined
+                    })
+                    .catch(() => {
+                      drag.followPending = false
+                    })
+                }
+              }
+              if (onBar && drag.followID && platform.closeWindow) {
+                const id = drag.followID
+                drag.followID = undefined
+                void platform.closeWindow(id)
+              }
+              if (drag.ghost && !drag.followID) moveTabDragGhost(drag.ghost, drag.x - drag.grabX, drag.y - drag.grabY)
+              if (!listRef) return
+              const next = nextTearOffDetached({
+                detached: drag.detached,
+                overStrip: onBar,
+                pointer: { x: drag.x, y: drag.y },
+                strip: listRef.getBoundingClientRect(),
+                orientation,
+              })
+              if (next === drag.detached) return
+              drag.detached = next
+              setTearOff("detached", next)
+              if (next && source?.element instanceof HTMLElement && !drag.ghost && !drag.followID) {
+                drag.ghost = createTabDragGhost(source.element)
+                moveTabDragGhost(drag.ghost, drag.x - drag.grabX, drag.y - drag.grabY)
+                return
+              }
+              if (!next) {
+                removeTabDragGhost(drag.ghost)
+                drag.ghost = undefined
+              }
+            }
+            drag.stop?.()
+            document.addEventListener("pointermove", move, { capture: true })
+            document.addEventListener("pointerup", move, { capture: true })
+            drag.stop = () => {
+              document.removeEventListener("pointermove", move, { capture: true })
+              document.removeEventListener("pointerup", move, { capture: true })
+              drag.stop = undefined
+            }
             if (!tab) return
-            const tabEl = source.element?.querySelector<HTMLDivElement>("[data-titlebar-tab]")
+            const tabEl = source?.element?.querySelector<HTMLDivElement>("[data-titlebar-tab]")
             props.onNavigate(tab, tabEl ?? undefined)
           }}
           onDragEnd={(event) => {
+            const orientation = vertical() ? "vertical" : "horizontal"
+            const onBar = isPointerOnTabBar(drag.x, drag.y, orientation)
+            const detached = drag.detached && !onBar
+            const enabled = drag.enabled
+            const followID = drag.followID
+            const tab = drag.tab
+            drag.stop?.()
+            removeTabDragGhost(drag.ghost)
+            drag.ghost = undefined
+            drag.detached = false
+            drag.enabled = false
+            drag.followID = undefined
+            drag.tab = undefined
+            drag.live = false
+            setTearOff("detached", false)
+            setTabDragging(false)
             const current = visibleTabIds()
             const source = event.operation.source
-            if (event.canceled || !isSortable(source)) return
+            if (event.canceled || !isSortable(source)) {
+              if (followID) void platform.closeWindow?.(followID)
+              return
+            }
+            if (followID) {
+              if (onBar) {
+                void platform.closeWindow?.(followID)
+                return
+              }
+              void platform.stopWindowFollow?.(followID)
+              const index = tab ? props.tabs.findIndex((item) => tabKey(item) === tabKey(tab)) : -1
+              if (index !== -1) tabs.removeTab(index)
+              return
+            }
+            if (tab && detached && enabled && props.onMoveToNewWindow) {
+              props.onMoveToNewWindow(tab, "cursor")
+              return
+            }
 
             const { initialIndex, index } = source
             if (initialIndex !== index) {
@@ -367,6 +546,11 @@ export function TitlebarTabStrip(props: {
                         props.onNavigate(tab, element)
                       }}
                       onClose={() => props.onClose(tab)}
+                      onMoveToNewWindow={
+                        props.onMoveToNewWindow ? () => props.onMoveToNewWindow?.(tab, "offset") : undefined
+                      }
+                      moveToNewWindowDisabled={moveDisabled(tab)}
+                      tearOff={tearOff.detached}
                     />
                   )
                 }
@@ -384,6 +568,11 @@ export function TitlebarTabStrip(props: {
                       props.onNavigate(tab, element)
                     }}
                     onClose={() => props.onClose(tab)}
+                    onMoveToNewWindow={
+                      props.onMoveToNewWindow ? () => props.onMoveToNewWindow?.(tab, "offset") : undefined
+                    }
+                    moveToNewWindowDisabled={moveDisabled(tab)}
+                    tearOff={tearOff.detached}
                   />
                 )
               }}

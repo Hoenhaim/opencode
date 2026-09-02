@@ -91,6 +91,20 @@
   position: relative;
 }
 
+[data-titlebar-tab-slot][data-tear-off="true"] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+[data-titlebar-tab-ghost] {
+  box-shadow: var(--v2-elevation-raised);
+  cursor: grabbing;
+}
+
+#root[data-tab-dragging]:not([aria-hidden]) *[data-tauri-drag-region] {
+  app-region: no-drag;
+}
+
 [data-color-scheme="dark"] [data-titlebar-tab-slot] {
   --tab-separator: var(--v2-background-bg-layer-02);
 }

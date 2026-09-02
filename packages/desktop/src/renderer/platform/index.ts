@@ -7,6 +7,7 @@ import {
 import type { ElectronAPI } from "../api-types"
 import { setPinchZoomEnabled, webviewZoom } from "../window/zoom"
 import { windowFullscreen } from "../window/fullscreen"
+import { setLastActiveUrl } from "../window/route-storage"
 import { createDesktopFiles } from "./files"
 import { createDesktopMenuAction } from "./menu"
 import { createDesktopNotify } from "./notifications"
@@ -55,6 +56,12 @@ export function createDesktopPlatform(
     getPinchZoomEnabled: () => api.getPinchZoomEnabled(),
     setPinchZoomEnabled,
     runDesktopMenuAction: createDesktopMenuAction(api),
+    createWindow: async (opts) => {
+      if (opts.url) setLastActiveUrl(opts.id, opts.url)
+      await api.createWindow(opts.id, opts.placement, opts.follow)
+    },
+    closeWindow: (id) => api.closeWindow(id),
+    stopWindowFollow: (id) => api.stopWindowFollow(id),
     checkAppExists: async (appName) => {
       return api.checkAppExists(appName)
     },

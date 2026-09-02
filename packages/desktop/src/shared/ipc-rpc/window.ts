@@ -24,6 +24,20 @@ export const WindowSetTitlebar = Rpc.make("WindowSetTitlebar", {
     }),
   },
 })
+export const WindowCreate = Rpc.make("WindowCreate", {
+  payload: {
+    id: Schema.String,
+    placement: Schema.Literals(["cursor", "offset"]),
+    follow: Schema.optionalKey(Schema.Boolean),
+  },
+  success: Schema.String,
+})
+export const WindowClose = Rpc.make("WindowClose", {
+  payload: { id: Schema.String },
+})
+export const WindowFollowStop = Rpc.make("WindowFollowStop", {
+  payload: { id: Schema.String },
+})
 export const WindowRpcs = RpcGroup.make(
   WindowThemeReady,
   WindowGetFocused,
@@ -35,4 +49,7 @@ export const WindowRpcs = RpcGroup.make(
   WindowGetPinchZoomEnabled,
   WindowSetPinchZoomEnabled,
   WindowSetTitlebar,
+  WindowCreate,
+  WindowClose,
+  WindowFollowStop,
 )

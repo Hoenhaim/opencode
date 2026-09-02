@@ -83,14 +83,16 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
     return (ids.length ? ids : [randomUUID()]).map((id) => create(id))
   }
 
-  const create = (id: string = randomUUID()) => {
+  const create = (id: string = randomUUID(), bounds?: { x: number; y: number; width: number; height: number }) => {
+    if (registry.has(id)) throw new Error("Window already exists")
+    // Tear-off passes explicit bounds so the new window opens under the cursor.
     const state = windowState({ file: windowStateFile(id), defaultWidth: 1280, defaultHeight: 800 })
     const appearance = windowAppearance(path, paths)
     const win = new BrowserWindow({
-      x: state.x,
-      y: state.y,
-      width: state.width,
-      height: state.height,
+      x: bounds?.x ?? state.x,
+      y: bounds?.y ?? state.y,
+      width: bounds?.width ?? state.width,
+      height: bounds?.height ?? state.height,
       show: false,
       autoHideMenuBar: true,
       ...appearance,
@@ -152,8 +154,12 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
     })
   }
 
-  return { create, restore }
+  return { create, restore, get: (id: string) => registry.get(id) }
 })
+
+export function windowByID(id: string) {
+  return registry.get(id)
+}
 
 function windowStateFile(id: string) {
   return `window-state-${safeWindowID(id)}.json`

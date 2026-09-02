@@ -20,7 +20,9 @@ import { createMediaQuery } from "@solid-primitives/media"
 import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "@/shell/titlebar/session-events"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection } from "@/runtime/server/registry"
-import { tabKey, useTabs } from "@/shell/tabs/tabs"
+import { tabKey, useTabs, type Tab } from "@/shell/tabs/tabs"
+import { canMoveTabToNewWindow } from "@/shell/tabs/tear-off"
+import { showToast } from "@/shell/notifications/toast"
 import type { ComposerState } from "@/composer/persistence"
 import "./titlebar.css"
 import { newTabTooltipKeybind } from "@/shell/commands/tooltip-keybind"
@@ -141,7 +143,7 @@ export function Titlebar(props: {
     <header
       data-slot="titlebar-v2"
       classList={{
-        "shrink-0 relative flex flex-row h-9 bg-v2-background-bg-deep overflow-visible": true,
+        "shrink-0 relative z-20 flex flex-row h-9 bg-v2-background-bg-deep overflow-visible": true,
         "order-last": bottom(),
       }}
       style={{
@@ -259,6 +261,14 @@ export function Titlebar(props: {
               tabsStoreActions.removeSessions(detail)
             })
 
+            const moveToNewWindow = (tab: Tab, placement: "cursor" | "offset") => {
+              const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
+              if (index === -1) return
+              void tabsStoreActions.moveToNewWindow(index, placement).catch(() => {
+                showToast({ title: language.t("common.requestFailed") })
+              })
+            }
+
             const openNewTab = () => {
               const route = layout.route()
               switch (route.type) {
@@ -352,6 +362,17 @@ export function Titlebar(props: {
                   keybind: "mod+shift+t",
                   onSelect: () => tabsStoreActions.reopenClosedTab(),
                 },
+                current &&
+                  platform.createWindow && {
+                    id: "tab.moveToNewWindow",
+                    category: "tab",
+                    title: language.t("command.tab.moveToNewWindow"),
+                    disabled: !canMoveTabToNewWindow({
+                      tabCount: tabsStore.length,
+                      pending: current.type === "session" && !!tabs.pendingSession(current.server, current.sessionId),
+                    }),
+                    onSelect: () => moveToNewWindow(current, "offset"),
+                  },
               ].filter((v) => v !== undefined)
             })
 
@@ -378,7 +399,7 @@ export function Titlebar(props: {
 
             return (
               <div
-                class="h-full flex-1 overflow-hidden flex flex-row items-center gap-1.5 px-2 md:pr-3"
+                class="h-full flex-1 overflow-visible flex flex-row items-center gap-1.5 px-2 md:pr-3"
                 classList={{
                   "pt-[max(0px,calc(8px-env(safe-area-inset-top,0px)))]": !bottom() && !windows(),
                   "pb-[max(0px,calc(8px-env(safe-area-inset-bottom,0px)))]": bottom(),
@@ -513,6 +534,7 @@ export function Titlebar(props: {
                                 if (index !== -1) tabsStoreActions.closeTab(index)
                               }}
                               onReorder={(keys) => tabsStoreActions.reorder(keys)}
+                              onMoveToNewWindow={platform.createWindow ? moveToNewWindow : undefined}
                             />
                           </div>
                           <button
@@ -587,6 +609,7 @@ export function Titlebar(props: {
                             if (index !== -1) tabsStoreActions.closeTab(index)
                           }}
                           onReorder={(keys) => tabsStoreActions.reorder(keys)}
+                          onMoveToNewWindow={platform.createWindow ? moveToNewWindow : undefined}
                         />
                         <Tooltip
                           placement="bottom"
@@ -627,6 +650,7 @@ export function Titlebar(props: {
                                 if (index !== -1) tabsStoreActions.closeTab(index)
                               }}
                               onReorder={(keys) => tabsStoreActions.reorder(keys)}
+                              onMoveToNewWindow={platform.createWindow ? moveToNewWindow : undefined}
                             />
                             <button
                               type="button"

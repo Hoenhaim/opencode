@@ -31,6 +31,8 @@ export function TabNavItem(props: {
   onRename: (title: string) => Promise<void>
   onClose: () => void
   onNavigate: () => void
+  onMoveToNewWindow?: () => void
+  moveToNewWindowDisabled?: boolean
   active?: boolean
   suppressNavigation?: boolean
   dragging?: boolean
@@ -358,6 +360,11 @@ export function TabNavItem(props: {
           <Menu.Item disabled={!props.session || rename.isPending} onSelect={() => setMenu("rename", true)}>
             {language.t("common.rename")}
           </Menu.Item>
+          <Show when={props.onMoveToNewWindow}>
+            <Menu.Item disabled={props.moveToNewWindowDisabled} onSelect={props.onMoveToNewWindow}>
+              {language.t("command.tab.moveToNewWindow")}
+            </Menu.Item>
+          </Show>
           <Menu.Item onSelect={props.onClose}>{language.t("common.closeTab")}</Menu.Item>
         </Menu.Context.Content>
       </Menu.Context.Portal>
@@ -372,6 +379,8 @@ export function DraftTabItem(props: {
   active?: boolean
   onNavigate: () => void
   onClose: () => void
+  onMoveToNewWindow?: () => void
+  moveToNewWindowDisabled?: boolean
   suppressNavigation?: boolean
   dragging?: boolean
   pressed?: boolean
@@ -385,78 +394,93 @@ export function DraftTabItem(props: {
     props.onClose()
   }
   return (
-    <div
-      ref={(el) => forwardTabRef(props.ref, el)}
-      data-titlebar-tab
-      data-slot="titlebar-tab-item"
-      data-orientation={props.orientation ?? "horizontal"}
-      data-active={props.active}
-      data-dragging={props.dragging}
-      data-state={props.active || props.pressed ? "pressed" : undefined}
-      class="group relative flex h-7 w-full min-w-0 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] px-1.5 [container-type:inline-size] whitespace-nowrap"
-      classList={{ invisible: props.hidden }}
-      onMouseDown={(event) => {
-        if (event.button !== MIDDLE_MOUSE_BUTTON) return
-        event.preventDefault()
-        event.stopPropagation()
-      }}
-      onAuxClick={(event) => {
-        if (event.button !== MIDDLE_MOUSE_BUTTON) return
-        closeTab(event)
-      }}
-    >
-      <a
-        data-slot="tab-link"
-        data-titlebar-tab-link
-        href={props.href}
-        draggable={false}
-        onDragStart={(event) => {
+    <Menu.Context>
+      <div
+        ref={(el) => forwardTabRef(props.ref, el)}
+        data-titlebar-tab
+        data-slot="titlebar-tab-item"
+        data-orientation={props.orientation ?? "horizontal"}
+        data-active={props.active}
+        data-dragging={props.dragging}
+        data-state={props.active || props.pressed ? "pressed" : undefined}
+        class="group relative flex h-7 w-full min-w-0 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] px-1.5 [container-type:inline-size] whitespace-nowrap"
+        classList={{ invisible: props.hidden }}
+        onMouseDown={(event) => {
+          if (event.button !== MIDDLE_MOUSE_BUTTON) return
           event.preventDefault()
           event.stopPropagation()
         }}
-        onMouseDown={(event) => {
-          // Navigate on mousedown to shave the press-release delay off tab switches.
-          if (event.button !== 0) return
-          if (props.suppressNavigation) return
-          props.onNavigate()
+        onAuxClick={(event) => {
+          if (event.button !== MIDDLE_MOUSE_BUTTON) return
+          closeTab(event)
         }}
-        onClick={(event) => {
-          event.preventDefault()
-          // Mouse navigation already happened on mousedown; detail 0 means keyboard activation.
-          if (event.detail > 0) return
-          if (props.suppressNavigation) return
-          props.onNavigate()
-        }}
-        class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 text-[13px] font-medium text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base [-webkit-user-drag:none]"
       >
-        <span class="flex size-4 shrink-0 items-center justify-center">
-          <Icon name="edit" />
-        </span>
-        <span
-          data-titlebar-tab-title
-          class="min-w-0 flex-1 overflow-hidden text-clip whitespace-nowrap outline-none leading-4"
-        >
-          {props.title}
-        </span>
-      </a>
-      <div data-slot="tab-close">
-        <IconButton
-          size="small"
-          variant="ghost-muted"
-          onPointerDown={(event) => {
+        <Menu.Context.Trigger
+          as="a"
+          disabled={props.dragging}
+          aria-haspopup="menu"
+          data-slot="tab-link"
+          data-titlebar-tab-link
+          href={props.href}
+          draggable={false}
+          onDragStart={(event) => {
             event.preventDefault()
             event.stopPropagation()
           }}
           onMouseDown={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
+            // Navigate on mousedown to shave the press-release delay off tab switches.
+            if (event.button !== 0) return
+            if (props.suppressNavigation) return
+            props.onNavigate()
           }}
-          class="hover-reveal relative z-10 group-hover:opacity-100 group-data-[active=true]:opacity-100 group-data-[editing=true]:opacity-100"
-          onClick={closeTab}
-          icon={<Icon name="xmark-small" />}
-          aria-label={language.t("common.closeTab")}
-        />
+          onClick={(event) => {
+            event.preventDefault()
+            // Mouse navigation already happened on mousedown; detail 0 means keyboard activation.
+            if (event.detail > 0) return
+            if (props.suppressNavigation) return
+            props.onNavigate()
+          }}
+          class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 text-[13px] font-medium text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base [-webkit-user-drag:none]"
+        >
+          <span class="flex size-4 shrink-0 items-center justify-center">
+            <Icon name="edit" />
+          </span>
+          <span
+            data-titlebar-tab-title
+            class="min-w-0 flex-1 overflow-hidden text-clip whitespace-nowrap outline-none leading-4"
+          >
+            {props.title}
+          </span>
+        </Menu.Context.Trigger>
+        <div data-slot="tab-close">
+          <IconButton
+            size="small"
+            variant="ghost-muted"
+            onPointerDown={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+            }}
+            onMouseDown={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+            }}
+            class="hover-reveal relative z-10 group-hover:opacity-100 group-data-[active=true]:opacity-100 group-data-[editing=true]:opacity-100"
+            onClick={closeTab}
+            icon={<Icon name="xmark-small" />}
+            aria-label={language.t("common.closeTab")}
+          />
+        </div>
       </div>
-    </div>
+      <Menu.Context.Portal>
+        <Menu.Context.Content>
+          <Show when={props.onMoveToNewWindow}>
+            <Menu.Item disabled={props.moveToNewWindowDisabled} onSelect={props.onMoveToNewWindow}>
+              {language.t("command.tab.moveToNewWindow")}
+            </Menu.Item>
+          </Show>
+          <Menu.Item onSelect={props.onClose}>{language.t("common.closeTab")}</Menu.Item>
+        </Menu.Context.Content>
+      </Menu.Context.Portal>
+    </Menu.Context>
   )
 }

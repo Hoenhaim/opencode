@@ -21,9 +21,11 @@ describe("window registry", () => {
 
   test("registers windows and persists each id once", () => {
     const app = setup()
+    expect(app.registry.has("a")).toBe(false)
     app.registry.register("a", { name: "a" })
     app.registry.register("a", { name: "a" })
     app.registry.register("b", { name: "b" })
+    expect(app.registry.has("a")).toBe(true)
     expect(app.state.stored).toEqual(["a", "b"])
   })
 

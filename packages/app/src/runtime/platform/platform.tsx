@@ -101,6 +101,11 @@ type PlatformBase = {
   /** Run a desktop-only menu action from the app chrome */
   runDesktopMenuAction?(action: DesktopMenuAction): Promise<void> | void
 
+  /** Open another desktop window, optionally seeded with a last-active route */
+  createWindow?(opts: { id: string; placement: "cursor" | "offset"; url?: string; follow?: boolean }): Promise<void>
+  closeWindow?(id: string): Promise<void>
+  stopWindowFollow?(id: string): Promise<void>
+
   /** Check if an editor app exists (desktop only) */
   checkAppExists?(appName: string): Promise<boolean>
 
