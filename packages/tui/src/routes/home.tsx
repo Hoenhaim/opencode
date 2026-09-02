@@ -1,6 +1,5 @@
 import { Prompt, type PromptRef } from "../component/prompt"
 import { createEffect, createMemo, createSignal, onMount, Show, untrack } from "solid-js"
-import { Logo } from "../component/logo"
 import { useArgs } from "../context/args"
 import { useRouteData } from "../context/route"
 import { usePromptRef } from "../context/prompt"
@@ -81,12 +80,7 @@ export function Home() {
         paddingRight={dimensions().width < 44 ? 1 : 2}
       >
         <box flexGrow={1} minHeight={0} />
-        <box height={4} minHeight={0} flexShrink={1} />
-        <box flexShrink={0}>
-          <Logo />
-        </box>
-        <box height={1} minHeight={0} flexShrink={1} />
-        <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1} flexShrink={0}>
+        <box width="100%" maxWidth={75} zIndex={1000} flexShrink={0}>
           <Prompt ref={bind} placeholders={placeholder} disabled={forms().length > 0} />
         </box>
         <box flexGrow={1} minHeight={0} />
