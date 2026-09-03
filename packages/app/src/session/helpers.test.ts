@@ -8,6 +8,7 @@ import {
   createSessionTabs,
   focusTerminalById,
   getTabReorderIndex,
+  openSessionPanelTab,
   shouldShowFileTree,
 } from "./helpers"
 
@@ -57,6 +58,25 @@ describe("createOpenReviewFile", () => {
     loading.resolve()
     await loading.promise
     expect(state.active).toBe("file://previous.ts")
+  })
+})
+
+describe("openSessionPanelTab", () => {
+  test("opens the review panel and activates the requested tab", async () => {
+    const calls: string[] = []
+    openSessionPanelTab({
+      openReviewPanel: () => calls.push("review"),
+      showAllFiles: () => calls.push("files"),
+      openTab: (tab) => {
+        calls.push(`open:${tab}`)
+      },
+      setActive: (tab) => calls.push(`active:${tab}`),
+      tab: "prompt",
+    })
+
+    expect(calls).toEqual(["review", "files", "open:prompt"])
+    await Promise.resolve()
+    expect(calls).toEqual(["review", "files", "open:prompt", "active:prompt"])
   })
 })
 
@@ -144,6 +164,28 @@ describe("createSessionTabs", () => {
       expect(result.activeTab()).toBe("norm:src/a.ts")
       expect(result.activeFileTab()).toBe("norm:src/a.ts")
       expect(result.closableTab()).toBe("norm:src/a.ts")
+      dispose()
+    })
+  })
+
+  test("prefers prompt when it is the active tab", () => {
+    createRoot((dispose) => {
+      const [state] = createStore({
+        active: "prompt" as string | undefined,
+        all: ["prompt"],
+      })
+      const tabs = createMemo(() => ({ active: () => state.active, all: () => state.all }))
+      const result = createSessionTabs({
+        tabs,
+        pathFromTab: () => undefined,
+        normalizeTab: (tab) => tab,
+        review: () => true,
+        hasReview: () => true,
+      })
+
+      expect(result.activeTab()).toBe("prompt")
+      expect(result.promptOpen()).toBe(true)
+      expect(result.closableTab()).toBe("prompt")
       dispose()
     })
   })
