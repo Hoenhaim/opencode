@@ -21,7 +21,13 @@ import {
 import { appendPrompt, promptLength } from "@/composer/prompt-parts"
 import { TabStorage } from "./schema"
 import { useCurrentRoute } from "@/shell/state/layout"
-import { canMoveTabToNewWindow, serializeWindowTabSeed, windowTabStorageName, writeWindowTabSeed } from "./tear-off"
+import {
+  canMoveTabToNewWindow,
+  deserializeWindowTabSeed,
+  serializeWindowTabSeed,
+  windowTabStorageName,
+  writeWindowTabSeed,
+} from "./tear-off"
 
 export type SessionTab = typeof TabStorage.Session.Type
 export type DraftTab = typeof TabStorage.Draft.Type
@@ -371,19 +377,13 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       async moveToNewWindow(
         index: number,
         placement: "cursor" | "offset",
-        opts?: { follow?: boolean; remove?: boolean },
+        opts?: { follow?: boolean; remove?: boolean; followOffset?: { x: number; y: number } },
       ) {
         const tab = store[index]
         if (!tab) return
         if (platform.platform !== "desktop" || !platform.createWindow || !platform.storage) return
-        if (
-          !canMoveTabToNewWindow({
-            tabCount: store.length,
-            pending: tab.type === "session" && !!pending[tabKey(tab)],
-          })
-        ) {
-          return
-        }
+        if (tab.type === "session" && !!pending[tabKey(tab)]) return
+        if (!opts?.follow && !canMoveTabToNewWindow({ tabCount: store.length })) return
 
         const key = tabKey(tab)
         const id = uuid()
@@ -393,9 +393,54 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
           platform.storage(windowTabStorageName(id)),
           serializeWindowTabSeed({ tab, key, info: info[key], panes: panes[key] }),
         )
-        await platform.createWindow({ id, placement, url: tabHref(tab), follow: opts?.follow })
-        if (opts?.remove !== false) removeTab(index)
+        await platform.createWindow({
+          id,
+          placement,
+          url: tabHref(tab),
+          follow: opts?.follow,
+          followOffset: opts?.followOffset,
+        })
+        if (opts?.remove !== false) actions.removeMovedTab(index)
         return id
+      },
+      adoptTab(input: { seed: ReturnType<typeof serializeWindowTabSeed>; screenX?: number }) {
+        const decoded = deserializeWindowTabSeed(input.seed)
+        if (!decoded) return
+        const next = decoded.tab
+        const key = tabKey(next)
+        const existing = store.find((item) => tabKey(item) === key)
+        if (existing) {
+          navigateTab(existing)
+          return
+        }
+        const insertAt = tabInsertIndex(input.screenX, store.length)
+        void startTransition(() => {
+          setStore(
+            produce((tabs) => {
+              if (tabs.some((item) => tabKey(item) === key)) return
+              tabs.splice(insertAt, 0, next)
+            }),
+          )
+          navigateTab(next)
+        })
+        if (decoded.info) setInfo(key, decoded.info)
+        if (decoded.panes) setPanes(key, decoded.panes)
+      },
+      async transferTab(index: number, targetID: string, screenX?: number) {
+        const tab = store[index]
+        if (!tab || !platform.transferTab) return
+        const key = tabKey(tab)
+        await platform.transferTab({
+          targetID,
+          seed: serializeWindowTabSeed({ tab, key, info: info[key], panes: panes[key] }),
+          screenX,
+        })
+        actions.removeMovedTab(index)
+      },
+      removeMovedTab(index: number) {
+        const last = store.length <= 1
+        removeTab(index)
+        if (last && platform.platform === "desktop") void platform.closeWindow?.(platform.windowID)
       },
       reopenClosedTab() {
         if (!closedReady()) {
@@ -563,6 +608,22 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       },
     }
 
+    createEffect(() => {
+      const unsub = platform.onAdoptTab?.((payload) => actions.adoptTab(payload))
+      onCleanup(() => unsub?.())
+    })
+
     return { ...actions, store, info, ready, infoReady, recentReady, panesReady }
   },
 })
+
+function tabInsertIndex(screenX: number | undefined, fallback: number) {
+  if (typeof screenX !== "number") return fallback
+  const x = screenX - window.screenX
+  const slots = [...document.querySelectorAll("[data-titlebar-tab-slot]")]
+  const found = slots.findIndex((slot) => {
+    const rect = slot.getBoundingClientRect()
+    return rect.left + rect.width / 2 > x
+  })
+  return found === -1 ? fallback : found
+}

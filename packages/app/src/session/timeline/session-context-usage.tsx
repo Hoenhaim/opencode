@@ -12,7 +12,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { useProviders } from "@/providers/catalog/providers"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useSessionLayout } from "@/session/session-layout"
-import { createSessionTabs } from "@/session/helpers"
+import { createSessionTabs, openSessionPanelTab } from "@/session/helpers"
 import { useSettings } from "@/settings/model"
 
 interface SessionContextUsageProps {
@@ -34,9 +34,15 @@ function openSessionContext(args: {
   layout: ReturnType<typeof useLayout>
   tabs: ReturnType<ReturnType<typeof useLayout>["tabs"]>
 }) {
-  args.view.reviewPanel.open(args.view.reviewPanel.opened() ? "other" : "context-button")
-  if (args.layout.fileTree.opened() && args.layout.fileTree.tab() !== "all") args.layout.fileTree.setTab("all")
-  void args.tabs.open("context").then(() => args.tabs.setActive("context"))
+  openSessionPanelTab({
+    openReviewPanel: () => args.view.reviewPanel.open(args.view.reviewPanel.opened() ? "other" : "context-button"),
+    showAllFiles: () => {
+      if (args.layout.fileTree.opened() && args.layout.fileTree.tab() !== "all") args.layout.fileTree.setTab("all")
+    },
+    openTab: (tab) => args.tabs.open(tab),
+    setActive: args.tabs.setActive,
+    tab: "context",
+  })
 }
 
 export function SessionContextUsage(props: SessionContextUsageProps) {
@@ -148,7 +154,6 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
       {context()?.usage ?? 0}% / {cost()} / {tokens()}
     </span>
   )
-
   const tooltipValue = () => (
     <div class="flex w-[120px] flex-col gap-2">
       <ContextTooltipRow name={language.t("context.usage.cost")} value={cost()} />

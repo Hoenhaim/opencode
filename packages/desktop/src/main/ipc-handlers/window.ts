@@ -3,8 +3,10 @@ import { Effect } from "effect"
 import { WindowRpcs } from "../../shared/ipc-rpc"
 import { IpcPortHandoff } from "../ipc-transport"
 import { ApplicationLifecycle } from "../lifecycle"
-import { getPinchZoomEnabled, setPinchZoomEnabled, setTitlebar, setWindowThemeReady, updateTitlebar, windowByID } from "../windows"
-import { startWindowFollow, stopWindowFollow } from "../windows/follow"
+import { emitIpcEvent } from "../ipc-events"
+import { WindowTabAdopted } from "../../shared/ipc-rpc/events"
+import { getPinchZoomEnabled, setPinchZoomEnabled, setTitlebar, setWindowThemeReady, tabBarWindowAtCursor, updateTitlebar, windowByID } from "../windows"
+import { isFollowingWindow, setWindowFollowVisible, startWindowFollow, stopWindowFollow } from "../windows/follow"
 import { TEAR_OFF_WINDOW_OFFSET, tearOffWindowBounds } from "../windows/tear-off"
 import { sender } from "./context"
 
@@ -42,7 +44,7 @@ export const windowHandlers = WindowRpcs.toLayer(
           const win = BrowserWindow.fromWebContents(sender(handoff, context))
           if (win) setTitlebar(win, theme)
         }),
-      WindowCreate: ({ id, placement, follow }, context) =>
+      WindowCreate: ({ id, placement, follow, followOffsetX, followOffsetY }, context) =>
         Effect.sync(() => {
           if (!id) throw new Error("Window ID is required")
           const source = BrowserWindow.fromWebContents(sender(handoff, context))
@@ -62,18 +64,49 @@ export const windowHandlers = WindowRpcs.toLayer(
               workArea: screen.getDisplayNearestPoint(point).workArea,
             }),
           )
-          if (follow) startWindowFollow(win, id)
+          if (follow) {
+            startWindowFollow(
+              win,
+              id,
+              followOffsetX === undefined && followOffsetY === undefined
+                ? undefined
+                : { x: followOffsetX ?? 80, y: followOffsetY ?? 18 },
+            )
+          }
           return id
         }),
       WindowClose: ({ id }) =>
         Effect.sync(() => {
           const win = windowByID(id)
-          stopWindowFollow(id, win)
+          stopWindowFollow(id, win, false)
           if (win && !win.isDestroyed()) win.close()
         }),
       WindowFollowStop: ({ id }) =>
         Effect.sync(() => {
-          stopWindowFollow(id, windowByID(id))
+          const win = windowByID(id)
+          stopWindowFollow(id, win)
+          if (win && !win.isDestroyed()) win.webContents.reload()
+        }),
+      WindowFollowSetVisible: ({ id, visible }) =>
+        Effect.sync(() => {
+          setWindowFollowVisible(id, visible, windowByID(id))
+        }),
+      WindowIsFollowing: (_args, context) =>
+        Effect.sync(() => isFollowingWindow(BrowserWindow.fromWebContents(sender(handoff, context)))),
+      WindowTabBarAtCursor: ({ exclude }) => Effect.sync(() => tabBarWindowAtCursor(new Set(exclude)) ?? null),
+      WindowTransferTab: ({ targetID, seed, screenX }) =>
+        Effect.sync(() => {
+          const win = windowByID(targetID)
+          if (!win || win.isDestroyed()) throw new Error("Window not found")
+          emitIpcEvent(
+            win.webContents,
+            new WindowTabAdopted({
+              seed,
+              ...(screenX === undefined ? {} : { screenX }),
+            }),
+          )
+          win.show()
+          win.focus()
         }),
     })
   }),

@@ -58,10 +58,14 @@ export function createDesktopPlatform(
     runDesktopMenuAction: createDesktopMenuAction(api),
     createWindow: async (opts) => {
       if (opts.url) setLastActiveUrl(opts.id, opts.url)
-      await api.createWindow(opts.id, opts.placement, opts.follow)
+      await api.createWindow(opts.id, opts.placement, opts.follow, opts.followOffset)
     },
     closeWindow: (id) => api.closeWindow(id),
     stopWindowFollow: (id) => api.stopWindowFollow(id),
+    setWindowFollowVisible: (id, visible) => api.setWindowFollowVisible(id, visible),
+    tabBarAtCursor: (exclude) => api.tabBarAtCursor(exclude),
+    transferTab: (input) => api.transferTab(input),
+    onAdoptTab: (cb) => api.onAdoptTab(cb),
     checkAppExists: async (appName) => {
       return api.checkAppExists(appName)
     },

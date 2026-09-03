@@ -8,6 +8,7 @@ import { useComposerState } from "@/composer/persistence"
 import { useServerSDK } from "@/runtime/server/client"
 import { useSettings } from "@/settings/model"
 import { useTerminal } from "@/session/terminal/context"
+import { openSessionPanelTab } from "@/session/helpers"
 import { showToast } from "@/shell/notifications/toast"
 import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/session/commands/export"
 import { usePlatform } from "@/runtime/platform/platform"
@@ -375,10 +376,16 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       id: "prompt.view",
       title: language.t("command.view.prompt"),
       onSelect: () => {
-        const layout = actions.session.layout
-        layout.view().reviewPanel.open()
-        const tabs = layout.tabs
-        void tabs().open("prompt").then(() => tabs().setActive("prompt"))
+        const sessionLayout = actions.session.layout
+        openSessionPanelTab({
+          openReviewPanel: () => sessionLayout.view().reviewPanel.open(),
+          showAllFiles: () => {
+            if (layout.fileTree.opened() && layout.fileTree.tab() !== "all") layout.fileTree.setTab("all")
+          },
+          openTab: (tab) => sessionLayout.tabs().open(tab),
+          setActive: (tab) => sessionLayout.tabs().setActive(tab),
+          tab: "prompt",
+        })
       },
     }),
     ...(shown()

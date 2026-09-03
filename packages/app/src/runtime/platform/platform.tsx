@@ -102,9 +102,25 @@ type PlatformBase = {
   runDesktopMenuAction?(action: DesktopMenuAction): Promise<void> | void
 
   /** Open another desktop window, optionally seeded with a last-active route */
-  createWindow?(opts: { id: string; placement: "cursor" | "offset"; url?: string; follow?: boolean }): Promise<void>
+  createWindow?(opts: {
+    id: string
+    placement: "cursor" | "offset"
+    url?: string
+    follow?: boolean
+    followOffset?: { x: number; y: number }
+  }): Promise<void>
   closeWindow?(id: string): Promise<void>
   stopWindowFollow?(id: string): Promise<void>
+  setWindowFollowVisible?(id: string, visible: boolean): Promise<void>
+  tabBarAtCursor?(exclude: string[]): Promise<{ id: string; screenX: number } | null>
+  transferTab?(input: {
+    targetID: string
+    seed: { tabs: string; recent: string; info: string; panes: string }
+    screenX?: number
+  }): Promise<void>
+  onAdoptTab?(
+    cb: (input: { seed: { tabs: string; recent: string; info: string; panes: string }; screenX?: number }) => void,
+  ): () => void
 
   /** Check if an editor app exists (desktop only) */
   checkAppExists?(appName: string): Promise<boolean>

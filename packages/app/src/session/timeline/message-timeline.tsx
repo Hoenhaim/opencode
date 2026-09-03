@@ -16,6 +16,7 @@ import type { Project } from "@/runtime/server/types"
 import { getFilename } from "@opencode-ai/util/path"
 import { Popover } from "@kobalte/core/popover"
 import { SessionContextUsage } from "@/session/timeline/session-context-usage"
+import { SessionPromptButton } from "@/session/timeline/session-prompt-button"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useData, useServer } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
@@ -738,6 +739,7 @@ function MessageTimelineView(
                 {(id) => (
                   <div class="shrink-0 flex items-center gap-2">
                     <SessionContextUsage placement="bottom" />
+                    <SessionPromptButton placement="bottom" />
                     <Show when={!parentID() && project()}>
                       {(project) => (
                         <Popover open={summaryOpen()} placement="bottom-end" gutter={6} onOpenChange={setSummary}>

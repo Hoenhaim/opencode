@@ -1,6 +1,6 @@
 import windowState from "electron-window-state"
 import { randomUUID } from "node:crypto"
-import { app, BrowserWindow } from "electron"
+import { app, BrowserWindow, screen } from "electron"
 import { Effect, FileSystem, Path } from "effect"
 import { openExternalURL } from "../files"
 import { scoped } from "../native/logging"
@@ -159,6 +159,25 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
 
 export function windowByID(id: string) {
   return registry.get(id)
+}
+
+export function tabBarWindowAtCursor(exclude: ReadonlySet<string>) {
+  const cursor = screen.getCursorScreenPoint()
+  const preview = { x: cursor.x - 24, y: cursor.y - 24, width: 260, height: 52 }
+  for (const [id, win] of registry.entries()) {
+    if (exclude.has(id) || win.isDestroyed()) continue
+    const bounds = win.getBounds()
+    const tabBar = { x: bounds.x, y: bounds.y, width: bounds.width, height: 56 }
+    if (!rectsOverlap(preview, tabBar)) continue
+    return { id, screenX: cursor.x }
+  }
+}
+
+function rectsOverlap(
+  a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number },
+) {
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
 }
 
 function windowStateFile(id: string) {

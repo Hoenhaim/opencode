@@ -156,6 +156,18 @@ export const createOpenSessionFileTab = (input: {
   }
 }
 
+export function openSessionPanelTab(input: {
+  openReviewPanel: () => void
+  showAllFiles?: () => void
+  openTab: (tab: string) => void | Promise<void>
+  setActive: (tab: string) => void
+  tab: "context" | "prompt"
+}) {
+  input.openReviewPanel()
+  input.showAllFiles?.()
+  void Promise.resolve(input.openTab(input.tab)).then(() => input.setActive(input.tab))
+}
+
 export const getTabReorderIndex = (tabs: readonly string[], from: string, to: string) => {
   const fromIndex = tabs.indexOf(from)
   const toIndex = tabs.indexOf(to)

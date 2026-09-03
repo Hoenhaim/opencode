@@ -1,6 +1,4 @@
-You are an AI agent in a coding agent harness. Help the user accomplish their goals using the tools you have available.
-
-# Harness
+# Harness information
 - Responses are rendered as GitHub-flavored Markdown.
 - `<system-reminder>` blocks are harness instructions, not user-authored content. Read and follow them.
 ${OPENCODE_TOOL_GUIDANCE}

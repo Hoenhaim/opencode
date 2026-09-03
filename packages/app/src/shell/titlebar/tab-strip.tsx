@@ -282,6 +282,9 @@ export function TitlebarTabStrip(props: {
     enabled: false,
     followID: undefined as string | undefined,
     followPending: false,
+    followPromise: undefined as Promise<string | undefined> | undefined,
+    followStarted: false,
+    followVisible: true,
     live: false,
     tab: undefined as Tab | undefined,
     ghost: undefined as HTMLElement | undefined,
@@ -384,12 +387,19 @@ export function TitlebarTabStrip(props: {
             drag.detached = false
             drag.followID = undefined
             drag.followPending = false
+            drag.followPromise = undefined
+            drag.followStarted = false
+            drag.followVisible = true
             drag.live = true
             setTearOff("detached", false)
             setTabDragging(true)
             const tab = source ? props.tabs.find((item) => tabKey(item) === source.id.toString()) : undefined
             drag.tab = tab
             drag.enabled = !!tab && !!props.onMoveToNewWindow && !moveDisabled(tab)
+            const canFollow =
+              !!tab &&
+              !!platform.createWindow &&
+              !(tab.type === "session" && !!tabs.pendingSession(tab.server, tab.sessionId))
             const move = (pointer: PointerEvent) => {
               drag.x = pointer.clientX
               drag.y = pointer.clientY
@@ -397,25 +407,63 @@ export function TitlebarTabStrip(props: {
               const onBar = isPointerOnTabBar(drag.x, drag.y, orientation)
               const outside = isPointerOutsideWindow(drag.x, drag.y)
               const currentTab = drag.tab
-              if (outside && drag.enabled && currentTab && !drag.followID && !drag.followPending) {
+              const lastTab = props.tabs.length <= 1
+              if (drag.followID && drag.followVisible === onBar) {
+                drag.followVisible = !onBar
+                void platform.setWindowFollowVisible?.(drag.followID, drag.followVisible)
+              }
+              if (listRef) {
+                const next = nextTearOffDetached({
+                  detached: drag.detached,
+                  overStrip: onBar,
+                  pointer: { x: drag.x, y: drag.y },
+                  strip: listRef.getBoundingClientRect(),
+                  orientation,
+                })
+                if (next !== drag.detached) {
+                  drag.detached = next
+                  setTearOff("detached", next)
+                  if (next && source?.element instanceof HTMLElement && !drag.ghost && !drag.followID) {
+                    drag.ghost = createTabDragGhost(source.element)
+                    moveTabDragGhost(drag.ghost, drag.x - drag.grabX, drag.y - drag.grabY)
+                  }
+                  if (!next) {
+                    removeTabDragGhost(drag.ghost)
+                    drag.ghost = undefined
+                  }
+                }
+              }
+              if (drag.ghost && !drag.followID) moveTabDragGhost(drag.ghost, drag.x - drag.grabX, drag.y - drag.grabY)
+              if (
+                (outside || (lastTab && drag.detached)) &&
+                canFollow &&
+                currentTab &&
+                !drag.followStarted &&
+                !drag.followPending
+              ) {
                 const index = props.tabs.findIndex((item) => tabKey(item) === tabKey(currentTab))
                 if (index !== -1) {
+                  drag.followStarted = true
                   drag.followPending = true
-                  void tabs
-                    .moveToNewWindow(index, "cursor", { follow: true, remove: false })
+                  const followPromise = tabs.moveToNewWindow(index, "cursor", {
+                    follow: true,
+                    remove: false,
+                    followOffset: listRef
+                      ? {
+                          x: listRef.getBoundingClientRect().left + drag.grabX,
+                          y: listRef.getBoundingClientRect().top + drag.grabY,
+                        }
+                      : undefined,
+                  })
+                  drag.followPromise = followPromise
+                  void followPromise
                     .then((id) => {
                       drag.followPending = false
                       if (!id) return
-                      if (!drag.live) {
-                        if (isPointerOnTabBar(drag.x, drag.y, orientation)) {
-                          void platform.closeWindow?.(id)
-                          return
-                        }
-                        void platform.stopWindowFollow?.(id)
-                        if (index !== -1) tabs.removeTab(index)
-                        return
-                      }
+                      if (!drag.live) return
                       drag.followID = id
+                      drag.followVisible = !isPointerOnTabBar(drag.x, drag.y, orientation)
+                      if (!drag.followVisible) void platform.setWindowFollowVisible?.(id, false)
                       removeTabDragGhost(drag.ghost)
                       drag.ghost = undefined
                     })
@@ -423,32 +471,6 @@ export function TitlebarTabStrip(props: {
                       drag.followPending = false
                     })
                 }
-              }
-              if (onBar && drag.followID && platform.closeWindow) {
-                const id = drag.followID
-                drag.followID = undefined
-                void platform.closeWindow(id)
-              }
-              if (drag.ghost && !drag.followID) moveTabDragGhost(drag.ghost, drag.x - drag.grabX, drag.y - drag.grabY)
-              if (!listRef) return
-              const next = nextTearOffDetached({
-                detached: drag.detached,
-                overStrip: onBar,
-                pointer: { x: drag.x, y: drag.y },
-                strip: listRef.getBoundingClientRect(),
-                orientation,
-              })
-              if (next === drag.detached) return
-              drag.detached = next
-              setTearOff("detached", next)
-              if (next && source?.element instanceof HTMLElement && !drag.ghost && !drag.followID) {
-                drag.ghost = createTabDragGhost(source.element)
-                moveTabDragGhost(drag.ghost, drag.x - drag.grabX, drag.y - drag.grabY)
-                return
-              }
-              if (!next) {
-                removeTabDragGhost(drag.ghost)
-                drag.ghost = undefined
               }
             }
             drag.stop?.()
@@ -469,48 +491,64 @@ export function TitlebarTabStrip(props: {
             const detached = drag.detached && !onBar
             const enabled = drag.enabled
             const followID = drag.followID
+            const followPromise = drag.followPromise
             const tab = drag.tab
+            const source = event.operation.source
+            const canceled = event.canceled
+            const sortable = isSortable(source)
             drag.stop?.()
             removeTabDragGhost(drag.ghost)
             drag.ghost = undefined
             drag.detached = false
             drag.enabled = false
             drag.followID = undefined
+            drag.followPromise = undefined
             drag.tab = undefined
             drag.live = false
             setTearOff("detached", false)
             setTabDragging(false)
             const current = visibleTabIds()
-            const source = event.operation.source
-            if (event.canceled || !isSortable(source)) {
-              if (followID) void platform.closeWindow?.(followID)
-              return
-            }
-            if (followID) {
-              if (onBar) {
-                void platform.closeWindow?.(followID)
+            const selfID = platform.platform === "desktop" ? platform.windowID : undefined
+            void (async () => {
+              const previewID = followID ?? (await followPromise?.catch(() => undefined))
+              const target = await platform.tabBarAtCursor?.(
+                [selfID, previewID].filter((id): id is string => !!id),
+              )
+              if (tab && target && target.id !== selfID) {
+                const index = props.tabs.findIndex((item) => tabKey(item) === tabKey(tab))
+                if (index !== -1) await tabs.transferTab(index, target.id, target.screenX).catch(() => undefined)
+                if (previewID) void platform.closeWindow?.(previewID)
                 return
               }
-              void platform.stopWindowFollow?.(followID)
-              const index = tab ? props.tabs.findIndex((item) => tabKey(item) === tabKey(tab)) : -1
-              if (index !== -1) tabs.removeTab(index)
-              return
-            }
-            if (tab && detached && enabled && props.onMoveToNewWindow) {
-              props.onMoveToNewWindow(tab, "cursor")
-              return
-            }
-
-            const { initialIndex, index } = source
-            if (initialIndex !== index) {
-              props.onReorder(
-                mergeVisibleTabOrder(
-                  props.tabs.map(tabKey),
-                  current,
-                  arrayMove(current, source.initialIndex, source.index),
-                ),
-              )
-            }
+              if (canceled || !sortable) {
+                if (previewID) void platform.closeWindow?.(previewID)
+                return
+              }
+              if (previewID) {
+                if (onBar || target?.id === selfID) {
+                  void platform.closeWindow?.(previewID)
+                  return
+                }
+                void platform.stopWindowFollow?.(previewID)
+                const index = tab ? props.tabs.findIndex((item) => tabKey(item) === tabKey(tab)) : -1
+                if (index !== -1) tabs.removeMovedTab(index)
+                return
+              }
+              if (tab && detached && enabled && props.onMoveToNewWindow) {
+                props.onMoveToNewWindow(tab, "cursor")
+                return
+              }
+              if (!isSortable(source)) return
+              if (source.initialIndex !== source.index) {
+                props.onReorder(
+                  mergeVisibleTabOrder(
+                    props.tabs.map(tabKey),
+                    current,
+                    arrayMove(current, source.initialIndex, source.index),
+                  ),
+                )
+              }
+            })()
           }}
         >
           <div

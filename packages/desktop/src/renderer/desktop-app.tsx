@@ -34,6 +34,19 @@ import { availableStartupServer, readyWslConnections } from "./wsl/connections"
 const MigrationStatus = lazy(() => import("./migration-status").then((module) => ({ default: module.MigrationStatus })))
 
 export function DesktopApp(props: { api: ElectronAPI; updater: UpdaterPlatform; version: string }) {
+  const [following] = createResource(() => props.api.isWindowFollowing())
+  createEffect(() => {
+    if (following() !== true) return
+    void props.api.themeReady()
+  })
+  return (
+    <Show when={following() === false} fallback={<LoadingSplash deep={false} />}>
+      {() => <DesktopApplication {...props} />}
+    </Show>
+  )
+}
+
+function DesktopApplication(props: { api: ElectronAPI; updater: UpdaterPlatform; version: string }) {
   const windowState = { id: props.api.getWindowID(), version: props.version }
   const url = new URL(getLastActiveUrl(windowState.id), "http://localhost")
   const route = currentRoute(url.pathname, url.search)

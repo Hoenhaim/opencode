@@ -74,9 +74,25 @@ export type ElectronAPI = {
   onPinchZoomEnabledChanged(cb: (enabled: boolean) => void): () => void
   onZoomFactorChanged(cb: (factor: number) => void): () => void
   setTitlebar(theme: TitlebarTheme): Promise<void>
-  createWindow(id: string, placement: "cursor" | "offset", follow?: boolean): Promise<string>
+  createWindow(
+    id: string,
+    placement: "cursor" | "offset",
+    follow?: boolean,
+    followOffset?: { x: number; y: number },
+  ): Promise<string>
   closeWindow(id: string): Promise<void>
   stopWindowFollow(id: string): Promise<void>
+  setWindowFollowVisible(id: string, visible: boolean): Promise<void>
+  isWindowFollowing(): Promise<boolean>
+  tabBarAtCursor(exclude: string[]): Promise<{ id: string; screenX: number } | null>
+  transferTab(input: {
+    targetID: string
+    seed: { tabs: string; recent: string; info: string; panes: string }
+    screenX?: number
+  }): Promise<void>
+  onAdoptTab(
+    cb: (input: { seed: { tabs: string; recent: string; info: string; panes: string }; screenX?: number }) => void,
+  ): () => void
   runDesktopMenuAction(action: DesktopMenuAction): Promise<void>
   setBackgroundColor(color: string): Promise<void>
   exportDebugLogs(): Promise<string>

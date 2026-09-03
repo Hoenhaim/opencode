@@ -204,6 +204,25 @@ export function SessionSidePanel(props: {
     openReviewPanel()
     tabs().setActive(next)
   }
+  // Kobalte selects Review when the tab collection changes (e.g. opening Prompt).
+  // Only apply onChange from pointer/keyboard on a tab trigger.
+  let tabChangeEngaged = false
+  const engageTabChange = (event: Event) => {
+    if (!(event.target instanceof Element)) return
+    if (event.target.closest('[data-slot="tabs-trigger-close-button"]')) return
+    if (event instanceof KeyboardEvent) {
+      if (!["ArrowLeft", "ArrowRight", "Home", "End", "Enter", " "].includes(event.key)) return
+      tabChangeEngaged = true
+      return
+    }
+    if (!event.target.closest('[data-slot="tabs-trigger-wrapper"]')) return
+    tabChangeEngaged = true
+  }
+  const handleTabChange = (value: string) => {
+    if (!tabChangeEngaged) return
+    tabChangeEngaged = false
+    activateTab(value)
+  }
   const browserTab = createMemo(() => {
     const active = activeTab()
     if (active === SESSION_OPEN_FILE_TAB) return SESSION_OPEN_FILE_TAB
@@ -291,12 +310,19 @@ export function SessionSidePanel(props: {
                       tabs().move(source.id.toString(), source.index)
                     }}
                   >
-                    <Tabs value={activeTab()} onChange={activateTab}>
-                      <div class="session-review-v2-tabs-bar sticky top-0 shrink-0 flex items-center">
+                    <Tabs value={activeTab()} onChange={handleTabChange}>
+                      <div
+                        class="session-review-v2-tabs-bar sticky top-0 shrink-0 flex items-center"
+                        onPointerDown={engageTabChange}
+                        onKeyDown={engageTabChange}
+                      >
                         <Tabs.List
                           ref={(el: HTMLDivElement) => {
                             tabList = el
-                            const stop = createFileTabListSync({ el, contextOpen })
+                            const stop = createFileTabListSync({
+                              el,
+                              contextOpen: () => contextOpen() || promptOpen(),
+                            })
                             onCleanup(stop)
                           }}
                         >

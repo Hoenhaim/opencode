@@ -1,5 +1,6 @@
 import { Schema } from "effect"
 import { Rpc, RpcGroup } from "effect/unstable/rpc"
+import { WindowTabSeed } from "./window"
 import { UpdaterStateSchema } from "./updater"
 import { WslServersEventSchema } from "./wsl"
 
@@ -31,6 +32,11 @@ export class WindowZoomChanged extends Schema.TaggedClass<WindowZoomChanged>()("
   factor: Schema.Number,
 }) {}
 
+export class WindowTabAdopted extends Schema.TaggedClass<WindowTabAdopted>()("WindowTabAdopted", {
+  seed: WindowTabSeed,
+  screenX: Schema.optionalKey(Schema.Number),
+}) {}
+
 export const DesktopEvent = Schema.Union([
   DeepLinksOpened,
   MenuCommandTriggered,
@@ -39,6 +45,7 @@ export const DesktopEvent = Schema.Union([
   WindowFullscreenChanged,
   WindowPinchZoomChanged,
   WindowZoomChanged,
+  WindowTabAdopted,
 ])
 export type DesktopEvent = Schema.Schema.Type<typeof DesktopEvent>
 

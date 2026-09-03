@@ -63,6 +63,12 @@ describe("openSessionTab", () => {
     )
   })
 
+  test("pins Prompt at the front and activates it", () => {
+    expect(openSessionTab(state(["file://a.ts"], "file://a.ts"), "prompt")).toEqual(
+      state(["prompt", "file://a.ts"], "prompt"),
+    )
+  })
+
   test("replaces a restored Open File placeholder with a direct open", () => {
     expect(openSessionTab(state(["file://a.ts", SESSION_OPEN_FILE_TAB], SESSION_OPEN_FILE_TAB), "file://b.ts")).toEqual(
       state(["file://a.ts", "file://b.ts"], "file://b.ts"),
