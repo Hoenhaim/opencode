@@ -544,6 +544,10 @@ const Cache = Schema.Struct({
   // Digest of the raw body, persisted so refresh() can skip republishing a
   // byte-identical catalog. Optional for entries written before it existed.
   digest: Schema.optional(Schema.String),
+  // Digest of snapshot.txt when this cache row was written. A rebuilt binary
+  // with a newer snapshot ignores rows from a previous snapshot so local
+  // catalog updates are not hidden by opencode.db.
+  snapshot: Schema.optional(Schema.String),
   body: CatalogJson,
 })
 const defaultSource = "https://models.opencode.ai"
@@ -575,6 +579,8 @@ export function bodyDigest(text: string) {
   return Hash.sha256(text)
 }
 
+const snapshotDigest = bodyDigest(snapshotText)
+
 export const layer = (options?: Options) =>
   Layer.effect(
     Service,
@@ -599,6 +605,7 @@ export const layer = (options?: Options) =>
       const key = cacheKey(source)
       const ttl = Duration.minutes(5)
       const lock = Semaphore.makeUnsafe(1)
+      const bundledDigest = options?.snapshot === false ? undefined : snapshotDigest
 
       const loadFromCache = Effect.fnUntraced(function* () {
         const value = yield* kv.get(key)
@@ -608,6 +615,7 @@ export const layer = (options?: Options) =>
             catalog: cached.value.body as Record<string, SourceProvider>,
             updatedAt: cached.value.updatedAt,
             digest: cached.value.digest,
+            snapshot: cached.value.snapshot,
           }
         if (value !== undefined) yield* kv.remove(key)
       })
@@ -638,7 +646,7 @@ export const layer = (options?: Options) =>
       // limits (Durable Object SQLite caps values at 2 MB and api.json
       // passed it in Aug 2026); a boot without a cache hit uses the snapshot.
       const writeCache = Effect.fn("ModelsDev.writeCache")(function* (text: string, digest = bodyDigest(text)) {
-        yield* kv.set(key, { updatedAt: Date.now(), digest, body: text }).pipe(
+        yield* kv.set(key, { updatedAt: Date.now(), digest, snapshot: bundledDigest, body: text }).pipe(
           Effect.catchCauseIf(
             (cause) => !Cause.hasInterruptsOnly(cause),
             (cause) => Effect.logWarning("Failed to cache models.dev catalog", { cause }),
@@ -650,9 +658,10 @@ export const layer = (options?: Options) =>
         const fromFile = yield* loadFromFile
         if (fromFile) return normalize(fromFile)
         const cached = options?.file ? undefined : yield* loadFromCache()
-        if (cached) return normalize(cached.catalog)
+        if (cached && cached.snapshot === bundledDigest) return normalize(cached.catalog)
         const bundled = yield* loadSnapshot
         if (bundled) return bundled
+        if (cached) return normalize(cached.catalog)
         return []
       }).pipe(Effect.withSpan("ModelsDev.populate"), Effect.orDie)
 

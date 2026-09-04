@@ -176,7 +176,11 @@ const makeMockKV = (cache: MockCache) =>
     remove: (key) => Effect.sync(() => cache.values.delete(key)).pipe(Effect.asVoid),
   })
 
-const buildLayer = (state: Ref.Ref<MockState>, cache: MockCache, options: ModelsDev.Options = { fetch: false }) =>
+const buildLayer = (
+  state: Ref.Ref<MockState>,
+  cache: MockCache,
+  options: ModelsDev.Options = { fetch: true, snapshot: false },
+) =>
   // Layer.fresh is required because the ModelsDev implementation is a module-level Layer constant,
   // and Effect.provide uses a process-global MemoMap by default — without fresh,
   // every test would reuse the cachedInvalidateWithTTL state from the first run.
@@ -276,10 +280,8 @@ describe("ModelsDev Service", () => {
     Effect.gen(function* () {
       const cache = makeCache()
       const state = yield* Ref.make(initialState)
-      const result = yield* provided(
-        state,
-        cache,
-        ModelsDev.Service.use((s) => s.get()),
+      const result = yield* ModelsDev.Service.use((s) => s.get()).pipe(
+        Effect.provide(buildLayer(state, cache, { fetch: false })),
       )
       expect(result.length).toBeGreaterThan(0)
       const anthropic = result.find((snapshot) => snapshot.info.id === "anthropic")

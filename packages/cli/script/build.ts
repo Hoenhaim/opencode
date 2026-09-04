@@ -125,6 +125,10 @@ export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sh
     entrypoints: ["./src/index.ts"],
     tsconfig: "./tsconfig.json",
     plugins: [appAssetsPlugin, solidPlugin, parcelWatcherPlugin, opencodePtyPlugin, simulationGraphPlugin],
+    loader: {
+      ".txt": "text",
+      ".md": "text",
+    },
     external: ["node-gyp"],
     format: "esm",
     minify: true,

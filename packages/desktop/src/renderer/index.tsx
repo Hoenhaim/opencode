@@ -19,4 +19,3 @@ startDesktopMenu(api)
 startDeepLinks(api)
 
 render(() => <DesktopApp api={api} updater={updater} version={version} />, root)
-void initializeSentry(version)
