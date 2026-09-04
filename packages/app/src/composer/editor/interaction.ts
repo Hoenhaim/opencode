@@ -40,7 +40,7 @@ export type ComposerEditorView = {
     stopping: Accessor<boolean>
     working?: Accessor<boolean>
     queue?: ComposerQueue
-    onSubmit: (options?: { alternate?: boolean }) => void
+    onSubmit: (options?: { alternate?: boolean; delivery?: "steer" | "queue" }) => void
     onStop: () => void
   }
   shell?: {
@@ -364,7 +364,7 @@ export function createComposerEditor(input: {
     openShell() {
       dispatch({ type: "mode.shell" })
     },
-    submit(options?: { alternate?: boolean }) {
+    submit(options?: { alternate?: boolean; delivery?: "steer" | "queue" }) {
       if (input.view.draftOnly) return
       input.view.submit.onSubmit(options)
       dispatch({ type: "popover.close" })

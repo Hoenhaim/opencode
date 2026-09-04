@@ -138,17 +138,6 @@ export type SessionMessageCompactionRunning = {
   recent: string
 }
 
-export type SessionMessageCompactionCompleted = {
-  type: "compaction"
-  id: string
-  metadata?: { [x: string]: JsonValue }
-  time: { created: number }
-  status: "completed"
-  reason: "auto" | "manual"
-  summary: string
-  recent: string
-}
-
 export type SessionActive = { type: "running" }
 
 export type SessionInboxDelivery = "steer" | "queue"
@@ -523,6 +512,19 @@ export type SessionMessageAssistantReasoning = {
   time?: { created: number; completed?: number }
 }
 
+export type SessionMessageCompactionCompleted = {
+  type: "compaction"
+  id: string
+  metadata?: { [x: string]: JsonValue }
+  time: { created: number }
+  status: "completed"
+  reason: "auto" | "manual"
+  model?: ModelRef
+  providerState?: SessionMessageProviderState
+  summary: string
+  recent: string
+}
+
 export type ToolContent = ToolTextContent | ToolFileContent
 
 export type SessionMessageAssistantRetry = { attempt: number; at: number; error: SessionStructuredError }
@@ -813,16 +815,6 @@ export type SessionCompactionStarted = {
   data: { sessionID: string; reason: "auto" | "manual"; recent: string; inputID?: string }
 }
 
-export type SessionCompactionEnded = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.compaction.ended"
-  durable: { aggregateID: string; seq: number; version: 1 }
-  location?: LocationRef
-  data: { sessionID: string; reason: "auto" | "manual"; text: string; recent: string }
-}
-
 export type SessionCompactionFailed = {
   id: string
   created: number
@@ -987,15 +979,6 @@ export type ReferenceUpdated = {
   type: "reference.updated"
   location?: LocationRef
   data: {}
-}
-
-export type PluginAdded = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "plugin.added"
-  location?: LocationRef
-  data: { id: string }
 }
 
 export type PluginUpdated = {
@@ -1361,6 +1344,23 @@ export type SessionToolCalled = {
     input: { [x: string]: any }
     executed: boolean
     state?: SessionMessageProviderState1
+  }
+}
+
+export type SessionCompactionEnded = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.compaction.ended"
+  durable: { aggregateID: string; seq: number; version: 1 }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    reason: "auto" | "manual"
+    model?: ModelRef
+    providerState?: SessionMessageProviderState1
+    text: string
+    recent: string
   }
 }
 
@@ -1896,7 +1896,7 @@ export type ConfigEntry =
         shell?: string
         model?: string | { providerID: string; model: string; variant?: string }
         default_agent?: string
-        autoupdate?: boolean | "notify"
+        update?: "disable" | "notify"
         share?: "manual" | "auto" | "disabled"
         enterprise?: { url?: string }
         username?: string
@@ -1985,6 +1985,7 @@ export type ConfigEntry =
             description?: string
             agent?: string
             model?: string | { providerID: string; model: string; variant?: string }
+            subagent?: boolean
             subtask?: boolean
           }
         }
@@ -2304,7 +2305,6 @@ export type V2Event =
   | ReferenceUpdated
   | PermissionAsked
   | PermissionReplied
-  | PluginAdded
   | PluginUpdated
   | ProjectUpdated
   | WorktreeUpdated
@@ -2589,6 +2589,14 @@ export type PluginListOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
   data: Array<PluginInfo>
 }
+
+export type PluginAwaitActivationInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type PluginAwaitActivationOutput = void
 
 export type PluginCheckInput = {
   readonly location?: {
@@ -3070,6 +3078,8 @@ export type SessionImportInput = {
               readonly time: { readonly created: number }
               readonly status: "completed"
               readonly reason: "auto" | "manual"
+              readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+              readonly providerState?: { readonly [x: string]: JsonValue }
               readonly summary: string
               readonly recent: string
             }
@@ -3347,6 +3357,8 @@ export type SessionImportInput = {
               readonly time: { readonly created: number }
               readonly status: "completed"
               readonly reason: "auto" | "manual"
+              readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+              readonly providerState?: { readonly [x: string]: JsonValue }
               readonly summary: string
               readonly recent: string
             }
@@ -3624,6 +3636,8 @@ export type SessionImportInput = {
               readonly time: { readonly created: number }
               readonly status: "completed"
               readonly reason: "auto" | "manual"
+              readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+              readonly providerState?: { readonly [x: string]: JsonValue }
               readonly summary: string
               readonly recent: string
             }

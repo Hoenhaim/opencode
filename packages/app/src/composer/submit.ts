@@ -27,6 +27,7 @@ type ComposerSubmission = {
 type ComposerSubmitInput = {
   adapter: ComposerAdapter
   mode: Accessor<"normal" | "shell">
+  commands: Accessor<readonly { name: string }[] | undefined>
   editor: () => HTMLDivElement | undefined
   queueScroll: () => void
   addToHistory: (prompt: Prompt, mode: "normal" | "shell") => void
@@ -46,7 +47,7 @@ type ComposerSubmitInput = {
 }
 
 export function createComposerSubmit(input: ComposerSubmitInput) {
-  const submit = async (event: globalThis.Event, options?: { alternate?: boolean }) => {
+  const submit = async (event: globalThis.Event, options?: { alternate?: boolean; delivery?: ComposerDelivery }) => {
     event.preventDefault()
 
     const submission = createComposerSubmission({
@@ -59,6 +60,7 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
     })
     const value = readSubmission(input, submission.prompt, submission.context, {
       alternate: options?.alternate ?? false,
+      delivery: options?.delivery,
     })
     if (!value) {
       if (input.adapter.working() && input.adapter.kind === "active-session") void input.adapter.interrupt()
@@ -67,6 +69,8 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
     if (submitting.has(input.adapter.state)) return
     submitting.add(input.adapter.state)
     const comments = input.comments.capture()
+    // Capture command intent before starting a session in a worktree whose catalog has not loaded.
+    const command = value.mode === "normal" ? findCommand(input.commands(), value.text) : undefined
 
     try {
       const started =
@@ -80,7 +84,6 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
       input.resetHistory()
       const restore = () => restoreSubmission(input, submission, value, comments)
 
-      const command = value.mode === "normal" ? findCommand(session, value.text) : undefined
       if (value.mode === "normal" && !command) {
         session.handoff?.set(handoffMessage(value))
         const optimisticBusy = !input.adapter.working()
@@ -177,7 +180,7 @@ function readSubmission(
   input: ComposerSubmitInput,
   prompt: Prompt,
   context: ComposerSubmission["context"],
-  options: { alternate: boolean },
+  options: { alternate: boolean; delivery?: ComposerDelivery },
 ): ComposerSubmission | undefined {
   const text = prompt.map((part) => ("content" in part ? part.content : "")).join("")
   const mode = input.mode()
@@ -216,7 +219,7 @@ function readSubmission(
       model: { modelID: model.id, providerID: model.provider.id },
       variant,
     },
-    delivery: input.delivery?.(options.alternate) ?? "steer",
+    delivery: options.delivery ?? input.delivery?.(options.alternate) ?? "steer",
   }
 }
 
@@ -279,12 +282,11 @@ async function sendShell(session: ComposerSession, value: ComposerSubmission) {
   await session.api.shell({ sessionID: session.id, id: Event.ID.create(), command: value.text })
 }
 
-function findCommand(session: ComposerSession, text: string) {
+function findCommand(commands: ReturnType<ComposerSubmitInput["commands"]>, text: string) {
   if (!text.startsWith("/")) return
   const [name, ...arguments_] = text.split(" ")
   const command = name.slice(1)
-  if (!session.data.location.command.list({ directory: session.directory })?.some((item) => item.name === command))
-    return
+  if (!commands?.some((item) => item.name === command)) return
   return { command, arguments: arguments_.join(" ") }
 }
 

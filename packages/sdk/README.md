@@ -62,7 +62,7 @@ await opencode.sessions.prompt({ sessionID: session.id, text: "Review the change
 
 - The same key and Location share one live instance. Different directories or workspace IDs always select separate instances, even with the same application key.
 - `configure` runs on a cache miss, not on each prompt. Loaded instances live until the host closes; change the application key or restart the host to reconstruct their birth configuration. Plugin transforms and reloads remain available within that lifetime.
-- Session metadata, message, inbox, and context reads do not initialize plugins; permission and form lists read instance services and therefore acquire the Session's instance. Configuration failure, an instance plugin ID that collides with a host `plugins` entry, or initial setup failure of a supplied plugin prevents capability acquisition, without falling back to another instance. A subsequent request can retry a failed construction.
+- Session metadata, message, inbox, and context reads do not initialize plugins; permission and form lists read instance services and therefore acquire the Session's instance. Configuration failure or a supplied plugin reported as failed after activation, including initial setup failure or an ID that collides with a host `plugins` entry (the host plugin keeps the ID), prevents capability acquisition, without falling back to another instance. A subsequent request can retry a failed construction.
 - Existing HTTP prompt middleware also acquires capabilities for an idempotent retry. After restart, that retry can reconstruct plugins before returning the original admission; prompt preparation and hooks do not rerun. Configuration failure can therefore block the retry even when its input was already saved.
 - Instance selection is not an authorization or storage-isolation boundary. Plugin Session APIs and the existing plugin-ID-based durable storage retain their normal scope.
 - Omitting `instances` preserves default Location sharing. Host-wide plugins remain separate from Session-selected configuration; retain host-wide catalog policy when locationless generation needs it.
@@ -73,7 +73,7 @@ The selector is installed before automatic recovery starts. Its callbacks must b
 
 Use a persistent `database.path` to recover Sessions after restart; the default database is in memory. Workerd uses its injected Durable Object storage. After restart, the next capability-dependent operation or recovery drain rebuilds the selected instance from saved Session metadata and application data.
 
-Promise plugin resources should be acquired in `setup` and released by its cleanup function. Effect configuration can acquire resources in its supplied instance Scope; capture application services before creating the SDK host.
+Promise plugin resources should be acquired in `setup` and released by its cleanup function. Effect configuration can acquire resources in its supplied instance Scope and require services provided to the SDK entrypoint (see the Effect section).
 
 ## Workerd
 
@@ -118,24 +118,26 @@ const session = yield * opencode.sessions.get({ sessionID })
 
 The Effect Workerd entrypoint is `@opencode-ai/sdk/workerd/effect`.
 
-Effect configuration uses the same keys and lifetime rules, with canonical `Session.Info` values and an Effect-returning factory:
+Effect configuration uses the same keys and lifetime rules, with canonical `Session.Info` values and an Effect-returning factory. `configure` may require services; `OpenCode.create` and `OpenCode.layer` carry those requirements, so the application satisfies them where it builds the SDK, as with any other Effect callback:
 
 ```ts
 import { OpenCode } from "@opencode-ai/sdk/effect"
-import { Effect, Schema } from "effect"
-import { threads } from "./threads-effect"
+import { Effect, Layer, Schema } from "effect"
+import { Threads } from "./threads-effect"
 import { slackPlugin } from "./slack-plugin-effect"
 
 const threadMetadata = Schema.decodeUnknownSync(Schema.Struct({ threadID: Schema.String }))
-const opencode =
-  yield *
-  OpenCode.create({
-    database: { path: "./sessions.db" },
-    instances: {
-      key: (session) => threadMetadata(session.metadata).threadID,
-      configure: (threadID) => threads.get(threadID).pipe(Effect.map((thread) => ({ plugins: [slackPlugin(thread)] }))),
-    },
-  })
+const opencode = OpenCode.layer({
+  database: { path: "./sessions.db" },
+  instances: {
+    key: (session) => threadMetadata(session.metadata).threadID,
+    configure: (threadID) =>
+      Effect.gen(function* () {
+        const threads = yield* Threads
+        return { plugins: [slackPlugin(yield* threads.get(threadID))] }
+      }),
+  },
+}).pipe(Layer.provide(Threads.layer))
 ```
 
-Both Workerd entrypoints also accept `instances`. The public `OpenCode.InstanceOptions` and `OpenCode.InstanceConfiguration` types describe the corresponding Promise or Effect callbacks.
+Resources acquired in `configure` still belong to the instance, not to the Scope the SDK was built in. Both Workerd entrypoints also accept `instances`. The public `OpenCode.InstanceOptions` and `OpenCode.InstanceConfiguration` types describe the corresponding Promise or Effect callbacks.

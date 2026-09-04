@@ -19,5 +19,4 @@ startDesktopMenu(api)
 startDeepLinks(api)
 
 render(() => <DesktopApp api={api} updater={updater} version={version} />, root)
-
-if (import.meta.env.DEV) void import("virtual:vite-opencode-picker/client")
+void initializeSentry(version)

@@ -13,7 +13,8 @@ import { displayName, projectForSession } from "@/shell/layout/helpers"
 import { SessionTabAvatar } from "@/shell/layout/session-tab-avatar"
 import { SessionProgressIndicatorV2 } from "@opencode-ai/session-ui/v2/session-progress-indicator-v2"
 import type { SessionInfo } from "@opencode-ai/client/promise"
-import { sessionLabel } from "@/session/title"
+import { sessionTabTitle } from "./tab-title"
+import { useSettings } from "@/settings/model"
 import { canOpenTabRename, forwardTabRef } from "./tab-gesture"
 import { TabPreviewPopover } from "./tab-popover"
 import "./tab-nav.css"
@@ -41,6 +42,7 @@ export function TabNavItem(props: {
   orientation?: "horizontal" | "vertical"
 }) {
   const language = useLanguage()
+  const settings = useSettings()
   const [menu, setMenu] = createStore({ open: false, rename: false })
   const [editing, setEditing] = createSignal(false)
   const [titleOverflowing, setTitleOverflowing] = createSignal(false)
@@ -63,7 +65,7 @@ export function TabNavItem(props: {
   })
   const title = createMemo(() => {
     const session = props.session
-    return session ? sessionLabel(session) : props.fallbackTitle
+    return sessionTabTitle(session ? session.title : props.fallbackTitle, language.t("session.tab.session"))
   })
 
   const projectName = createMemo(() => {
@@ -300,7 +302,7 @@ export function TabNavItem(props: {
             event.preventDefault()
           }}
         />
-        <Show when={props.orientation === "vertical" && projectName()}>
+        <Show when={props.orientation === "vertical" && settings.appearance.showProjectName() && projectName()}>
           {(name) => (
             <span data-slot="tab-project" dir="auto">
               {name()}
@@ -443,7 +445,20 @@ export function DraftTabItem(props: {
           class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 text-[13px] font-medium text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base [-webkit-user-drag:none]"
         >
           <span class="flex size-4 shrink-0 items-center justify-center">
-            <Icon name="edit" />
+            <svg
+              class="text-v2-icon-icon-muted group-data-[active='true']:text-v2-icon-icon-base"
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              aria-hidden="true"
+            >
+              <path
+                d="M9.00002 13.5H14M2.60419 10.9167V13.3958H5.08335L13.3959 5.08333L10.9167 2.60416L2.60419 10.9167Z"
+                stroke="currentColor"
+              />
+            </svg>
           </span>
           <span
             data-titlebar-tab-title

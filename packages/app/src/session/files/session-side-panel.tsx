@@ -240,7 +240,7 @@ export function SessionSidePanel(props: {
     return active !== "review" && active !== "context" && active !== "prompt" && active !== "empty"
   })
   const openFileKeybind = createMemo(() => command.keybindParts("file.open"))
-  const closeTabKeybind = createMemo(() => command.keybindParts("tab.close"))
+  const closeTabKeybind = createMemo(() => command.keybindParts("file.close"))
   createEffect(() => {
     if (!file.ready()) return
 
@@ -415,6 +415,7 @@ export function SessionSidePanel(props: {
                               >
                                 <Tabs.Trigger
                                   value={SESSION_OPEN_FILE_TAB}
+                                  class="group"
                                   onMiddleClick={() => tabs().close(SESSION_OPEN_FILE_TAB)}
                                   closeButton={
                                     <Tooltip
@@ -429,16 +430,29 @@ export function SessionSidePanel(props: {
                                       placement="bottom"
                                       gutter={10}
                                     >
-                                      <Tabs.CloseButton
-                                        onClick={() => tabs().close(SESSION_OPEN_FILE_TAB)}
+                                      <IconButton
+                                        size="small"
+                                        variant="ghost-muted"
+                                        class="hover-reveal relative z-10 group-hover:opacity-100"
+                                        classList={{ "opacity-100": activeTab() === SESSION_OPEN_FILE_TAB }}
+                                        onPointerDown={(event) => {
+                                          event.preventDefault()
+                                          event.stopPropagation()
+                                        }}
+                                        onClick={(event) => {
+                                          event.preventDefault()
+                                          event.stopPropagation()
+                                          tabs().close(SESSION_OPEN_FILE_TAB)
+                                        }}
+                                        icon={<Icon name="xmark-small" />}
                                         aria-label={language.t("common.closeTab")}
                                       />
                                     </Tooltip>
                                   }
                                   hideCloseButton
                                 >
-                                  <div class="flex items-center gap-1.5 italic">
-                                    <Icon name="open-file" size="small" />
+                                  <div class="flex items-center gap-1.5">
+                                    <Icon name="file-tree" size="small" />
                                     <span>{language.t("command.file.open")}</span>
                                   </div>
                                 </Tabs.Trigger>
@@ -459,7 +473,7 @@ export function SessionSidePanel(props: {
                               class="flex items-center"
                             >
                               <IconButton
-                                icon={<Icon name="plus-small" />}
+                                icon={<Icon name="plus" />}
                                 variant="ghost-muted"
                                 size="large"
                                 onClick={() => openFileBrowser()}
@@ -469,11 +483,16 @@ export function SessionSidePanel(props: {
                           </div>
                         </Tabs.List>
                         <div
-                          class="session-review-v2-open-in-app-slot shrink-0 flex items-center pr-3"
+                          data-slot="session-side-panel-actions"
+                          class="session-review-v2-open-in-app-slot self-start shrink-0 flex items-center gap-2 pe-3"
+                          classList={{ "h-[51px]": props.stacked, "h-12": !props.stacked }}
                           onPointerDown={(event) => event.stopPropagation()}
                           onClick={(event) => event.stopPropagation()}
                         >
                           <OpenInAppButton directory={projectDirectory} />
+                          <Show when={reviewOpen()}>
+                            <div class="size-7 shrink-0" aria-hidden />
+                          </Show>
                         </div>
                       </div>
 

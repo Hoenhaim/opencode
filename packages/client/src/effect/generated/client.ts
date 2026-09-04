@@ -15,6 +15,8 @@ import type {
   AgentGetOutput,
   PluginListInput,
   PluginListOutput,
+  PluginAwaitActivationInput,
+  PluginAwaitActivationOutput,
   PluginCheckInput,
   PluginCheckOutput,
   PluginUpdateInput,
@@ -330,6 +332,11 @@ const EndpointPluginList = (raw: RawClient["server.plugin"]) => (input?: PluginL
     raw["plugin.list"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
+const EndpointPluginAwaitActivation = (raw: RawClient["server.plugin"]) => (input?: PluginAwaitActivationInput) =>
+  preserveEffect<PluginAwaitActivationOutput>()(
+    raw["plugin.awaitActivation"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
 const EndpointPluginCheck = (raw: RawClient["server.plugin"]) => (input?: PluginCheckInput) =>
   preserveEffect<PluginCheckOutput>()(
     raw["plugin.check"]({ query: { location: input?.["location"] }, payload: { target: input?.["target"] } }).pipe(
@@ -346,6 +353,7 @@ const EndpointPluginUpdate = (raw: RawClient["server.plugin"]) => (input: Plugin
 
 const adaptGroupPlugin = (raw: RawClient["server.plugin"]) => ({
   list: EndpointPluginList(raw),
+  awaitActivation: EndpointPluginAwaitActivation(raw),
   check: EndpointPluginCheck(raw),
   update: EndpointPluginUpdate(raw),
 })

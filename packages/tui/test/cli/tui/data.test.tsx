@@ -15,6 +15,8 @@ import { LocationProvider, useLocation } from "../../../src/context/location"
 import { RouteProvider } from "../../../src/context/route"
 import { ThemeProvider } from "../../../src/context/theme"
 import { Composer } from "../../../src/routes/session/composer"
+import { DialogProvider } from "../../../src/ui/dialog"
+import { ToastProvider } from "../../../src/ui/toast"
 import { createSessionRows, type SessionRow } from "../../../src/routes/session/rows"
 import { createApi, createEventStream, createFetch, directory, json, worktree } from "../../fixture/tui-client"
 import { emptyThemeSource } from "../../fixture/fixture"
@@ -41,7 +43,7 @@ function emitEvent(events: ReturnType<typeof createEventStream>, event: OpenCode
   events.emit({ ...event, location: { directory } })
 }
 
-const config = createTuiResolvedConfig()
+const config = createTuiResolvedConfig({ session: { terminal: false } })
 
 function DataProvider(props: ParentProps) {
   return (
@@ -1129,6 +1131,10 @@ test("removes committed revert messages from local state", async () => {
     expect(data.session.message.list(sessionID).map((message) => message.id)).toEqual(["msg_001"])
     expect(data.session.message.get(sessionID, "msg_002")).toBeUndefined()
     expect(data.session.message.get(sessionID, "msg_003")).toBeUndefined()
+    // The projector also drops inbox items enqueued at or after the boundary, without a cancel event.
+    expect(data.session.pending.list(sessionID).map((item) => item.id)).toEqual(["msg_001"])
+    expect(data.session.input.list(sessionID)).toEqual(["msg_001"])
+    expect(data.session.input.has(sessionID, "msg_002")).toBe(false)
   } finally {
     app.renderer.destroy()
   }
@@ -2016,7 +2022,11 @@ test("keeps shell state scoped to location", async () => {
       <RouteProvider initialRoute={{ type: "session", sessionID: "ses_shared" }}>
         <Keymap.Provider>
           <ThemeProvider mode="dark" source={emptyThemeSource}>
-            <Composer sessionID="ses_shared" open={true} defaultTab="shell" />
+            <ToastProvider>
+              <DialogProvider>
+                <Composer sessionID="ses_shared" open={true} defaultTab="shell" />
+              </DialogProvider>
+            </ToastProvider>
           </ThemeProvider>
         </Keymap.Provider>
       </RouteProvider>
