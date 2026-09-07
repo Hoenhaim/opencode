@@ -2,7 +2,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { Icon } from "@opencode-ai/ui/icon"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
-import { Show, createMemo, createSignal } from "solid-js"
+import { Show, createEffect, createMemo, createSignal } from "solid-js"
 import { Schema } from "effect"
 import createPresence from "solid-presence"
 import { Composer } from "@/composer/composer"
@@ -67,71 +67,92 @@ export function NewSessionView(props: {
           active={props.composer.state.drag === "active"}
           input={props.composer.model.selection.current()?.capabilities.input}
         />
-        <div
-          class={
-            desktop
-              ? "flex shrink-0 max-h-[50%] justify-center overflow-y-auto px-6 pt-8 pb-4"
-              : "absolute inset-x-0 top-[25.375%] flex justify-center px-6"
-          }
-        >
-          <div class={NEW_SESSION_CONTENT_WIDTH}>
-            <Show when={!desktop}>
-              <div class="aspect-[720/129] w-full" aria-hidden="true" />
-            </Show>
-            <div class="flex flex-col gap-8" classList={{ "mt-8": !desktop }}>
-              <Composer model={props.composer} />
-              <Show when={props.project.empty()}>
-                <PromptProjectAddButton controller={props.project} />
+        <div class={desktop ? "flex min-h-0 flex-1 flex-col" : "contents"}>
+          <Show when={desktop}>
+            <div class="min-h-0 flex-1" />
+          </Show>
+          <div
+            class={
+              desktop
+                ? "flex shrink-0 justify-center overflow-y-auto px-6 pb-4"
+                : "absolute inset-x-0 top-[25.375%] flex justify-center px-6"
+            }
+          >
+            <div class={NEW_SESSION_CONTENT_WIDTH}>
+              <Show when={!desktop}>
+                <div class="aspect-[720/129] w-full" aria-hidden="true" />
               </Show>
-              <Show when={props.project.selected()}>
-                <div class="flex min-h-7 min-w-0 flex-col items-center justify-center gap-0 text-v2-text-text-faint sm:flex-row">
-                  <PromptProjectSelector controller={props.project} placement="bottom" />
-                  <Show
-                    when={props.workspace.bar.visible()}
-                    fallback={
-                      <PromptGitStatus
+              <div class="flex flex-col gap-8" classList={{ "mt-8": !desktop }}>
+                <Composer model={props.composer} />
+                <Show when={props.project.empty()}>
+                  <PromptProjectAddButton controller={props.project} />
+                </Show>
+                <Show when={props.project.selected()}>
+                  <div class="flex min-h-7 min-w-0 flex-col items-center justify-center gap-0 text-v2-text-text-faint sm:flex-row">
+                    <PromptProjectSelector controller={props.project} placement="bottom" />
+                    <Show
+                      when={props.workspace.bar.visible()}
+                      fallback={
+                        <PromptGitStatus
+                          branch={props.workspace.bar.branch()}
+                          noGit={!props.workspace.project.git()}
+                          class="ms-1"
+                        />
+                      }
+                    >
+                      <PromptWorkspaceSelector
+                        value={props.workspace.selection.value()}
+                        projectRoot={props.workspace.project.root()}
+                        workspaces={props.workspace.project.workspaces()}
+                        branches={props.workspace.project.branches()}
                         branch={props.workspace.bar.branch()}
-                        noGit={!props.workspace.project.git()}
-                        class="ms-1"
+                        onboarding={onboardingReady() && !onboarding.used}
+                        onChange={select}
+                        onCreate={props.workspace.selection.create}
+                        onSearch={props.workspace.project.searchBranches}
+                        onDone={props.composer.restoreFocus}
+                        onViewAll={props.workspace.project.openAll}
                       />
-                    }
-                  >
-                    <PromptWorkspaceSelector
-                      value={props.workspace.selection.value()}
-                      projectRoot={props.workspace.project.root()}
-                      workspaces={props.workspace.project.workspaces()}
-                      branches={props.workspace.project.branches()}
-                      branch={props.workspace.bar.branch()}
-                      onboarding={onboardingReady() && !onboarding.used}
-                      onChange={select}
-                      onCreate={props.workspace.selection.create}
-                      onSearch={props.workspace.project.searchBranches}
-                      onDone={props.composer.restoreFocus}
-                      onViewAll={props.workspace.project.openAll}
-                    />
-                  </Show>
-                </div>
-              </Show>
+                    </Show>
+                  </div>
+                </Show>
+              </div>
             </div>
           </div>
+          <Show when={desktop}>
+            <NewSessionHistory project={props.project} />
+          </Show>
         </div>
-        <Show when={desktop}>
-          <NewSessionHistory />
-        </Show>
         <ProviderTip />
       </div>
     </div>
   )
 }
 
-function NewSessionHistory() {
+function NewSessionHistory(props: { project: PromptProjectController }) {
   const home = createHomeController()
-  const sessions = createHomeSessionsController(home, { palette: false })
+  const sessions = createHomeSessionsController(home, {
+    palette: false,
+    projectDirectories: () => {
+      const project = props.project.selected()
+      if (!project) return
+      return [project.worktree, ...(project.sandboxes ?? [])]
+    },
+  })
   const search = createHomeSessionSearchController(home, sessions)
   const scroll = createHomeScrollController(sessions.data.groups)
+
+  createEffect(() => {
+    const project = props.project.selected()
+    const ctx = home.server.focusedContext()
+    if (!project?.id || !ctx || ctx.sdk.connection.status() !== "connected") return
+    const root = ctx.sync.data.project.find((item) => item.id === project.id)?.worktree
+    if (root) void ctx.sync.worktrees.load(root)
+  })
+
   return (
     <ScrollView
-      class="min-h-0 flex-1 [container-type:size] mb-12"
+      class="min-h-0 max-h-[50%] flex-1 [container-type:size] pb-12"
       thumbContainer={scroll.viewport.thumbTrack()}
       thumbHoverTarget={scroll.viewport.hoverTarget()}
       viewportRef={scroll.viewport.setViewport}

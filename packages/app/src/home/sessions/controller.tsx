@@ -41,7 +41,10 @@ export type HomeSessionGroup = {
 
 export type OpenSessionOptions = { background?: boolean }
 
-export function createHomeSessionsController(home: HomeController, options: { palette?: boolean } = {}) {
+export function createHomeSessionsController(
+  home: HomeController,
+  options: { palette?: boolean; projectDirectories?: Accessor<string[] | undefined> } = {},
+) {
   const tabs = useTabs()
   const command = useCommand()
   const dialog = useDialog()
@@ -49,6 +52,7 @@ export function createHomeSessionsController(home: HomeController, options: { pa
   const platform = usePlatform()
   const queryClient = useQueryClient()
   const projectDirectories = createMemo(() => {
+    if (options.projectDirectories) return options.projectDirectories()
     const selected = home.selection.value().directory
     if (!selected) return
     const project = home.project.selected()
@@ -256,7 +260,7 @@ export function createHomeSessionsController(home: HomeController, options: { pa
       searchRecords: allRecords,
     },
     session: {
-      showProjectName: () => !home.project.selected(),
+      showProjectName: () => !projectDirectories(),
       server: () => home.selection.value().server,
       canCreate: () => !!home.project.newSession(),
       lookup: async (sessionID: string) => {
