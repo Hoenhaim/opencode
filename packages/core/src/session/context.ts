@@ -4,6 +4,7 @@ import { Model } from "@opencode-ai/schema/model"
 import { Context, Effect, Layer } from "effect"
 import { Agent } from "../agent.js"
 import { Catalog } from "../catalog.js"
+import { Config } from "../config.js"
 import { CodeModeInstructions } from "../codemode/instructions.js"
 import { Database } from "../database/database.js"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
@@ -76,6 +77,7 @@ const layer = Layer.effect(
     const agents = yield* Agent.Service
     const builtins = yield* InstructionBuiltIns.Service
     const catalog = yield* Catalog.Service
+    const config = yield* Config.Service
     const db = (yield* Database.Service).db
     const discovery = yield* InstructionDiscovery.Service
     const entries = yield* InstructionEntry.Service
@@ -126,9 +128,10 @@ const layer = Layer.effect(
       yield* mcpTools.flush
       const agent = yield* agents.select(session.agent)
       if (!agent.info) return yield* new AgentNotFoundError({ sessionID: session.id, agent: session.agent ?? agent.id })
+      const reason = Config.latest(yield* config.entries(), "tool_reason")
       const loaded = yield* Effect.all(
         {
-          tools: registry.snapshot(agent.info.permissions),
+          tools: registry.snapshot(agent.info.permissions, reason),
           builtins: builtins.load(sessionID),
           discovery: discovery.load(),
           skills: skillInstructions.load(agent),
@@ -180,6 +183,7 @@ export const node = makeLocationNode({
   deps: [
     Agent.node,
     Catalog.node,
+    Config.node,
     Database.node,
     InstructionBuiltIns.node,
     InstructionDiscovery.node,

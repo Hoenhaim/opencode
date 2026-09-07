@@ -54,6 +54,8 @@ type Execution<E, Reason> = {
  */
 export const make = <Key, E, Reason = never>(options: {
   readonly drain: (key: Key, force: boolean, scope: Promotable) => Effect.Effect<void, E>
+  /** Policy stops discard wakes belonging to the stopped intent, just like explicit interruption. */
+  readonly stopOnError?: (error: E) => boolean
   /** Runs once when a process-local busy period begins, before its first drain. */
   readonly started?: (key: Key) => Effect.Effect<void>
   /**
@@ -68,6 +70,13 @@ export const make = <Key, E, Reason = never>(options: {
 
     const loop = (key: Key, execution: Execution<E, Reason>, force: boolean): Effect.Effect<void, E> =>
       Effect.suspend(() => options.drain(key, force, execution.scope)).pipe(
+        Effect.tapError((error) =>
+          Effect.sync(() => {
+            if (!options.stopOnError?.(error)) return
+            execution.stopping = true
+            execution.pendingWake = undefined
+          }),
+        ),
         Effect.andThen(
           Effect.suspend(() => {
             if (execution.stopping || execution.pendingWake === undefined) return Effect.void

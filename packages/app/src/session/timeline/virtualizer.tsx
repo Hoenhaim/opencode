@@ -51,6 +51,7 @@ type Projection = Pick<
 type Input = {
   sessionKey: Accessor<string>
   presentationKey?: Accessor<string>
+  contextToolDefaultOpen?: Accessor<boolean>
   projection: Projection
   showHeader: Accessor<boolean>
   /** True while the timeline follows the newest content. Drives every anchoring decision. */
@@ -135,7 +136,7 @@ export function createTimelineVirtualizer(input: Input) {
                   row._tag === "AssistantPart" &&
                   row.group.type === "context" &&
                   row.group.refs.length <= 16 &&
-                  !toolOpen[`context:${row.group.key}`]
+                  !(toolOpen[`context:${row.group.key}`] ?? input.contextToolDefaultOpen?.() ?? false)
                 ) && !input.canRenderImmediately?.(row, toolOpen),
             )
         : -1

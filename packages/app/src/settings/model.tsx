@@ -82,6 +82,7 @@ const generalSchema = Persistence.struct({
   showStatus: Schema.Boolean,
   showProjectIcon: Schema.Boolean,
   showTerminal: Schema.Boolean,
+  exploredDefaultOpen: Schema.Boolean,
   timelineDetail: Persistence.struct({
     shell: activitySchema,
     edit: activitySchema,
@@ -246,6 +247,7 @@ export const defaultSettings: Settings = {
     showStatus: false,
     showProjectIcon: false,
     showTerminal: false,
+    exploredDefaultOpen: true,
     timelineDetail: {
       ...timelinePresets[2].value,
       shell: { placement: "separate", details: "expanded" },
@@ -336,6 +338,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         timelineDetail: withFallback(() => store.general?.timelineDetail, defaultSettings.general.timelineDetail),
         setTimelineDetail(value: TimelineDetail) {
           setStore("general", "timelineDetail", structuredClone(unwrap(value)))
+        },
+        exploredDefaultOpen: withFallback(
+          () => store.general?.exploredDefaultOpen,
+          defaultSettings.general.exploredDefaultOpen,
+        ),
+        setExploredDefaultOpen(value: boolean) {
+          setStore("general", "exploredDefaultOpen", value)
         },
         showCustomAgents,
         setShowCustomAgents(value: boolean) {

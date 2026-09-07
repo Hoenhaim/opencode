@@ -1,6 +1,7 @@
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { Icon } from "@opencode-ai/ui/icon"
+import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { Show, createMemo, createSignal } from "solid-js"
 import { Schema } from "effect"
 import createPresence from "solid-presence"
@@ -20,6 +21,12 @@ import { useProviders } from "@/providers/catalog/providers"
 import { NEW_SESSION_CONTENT_WIDTH } from "@/new-session/layout"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
+import { usePlatform } from "@/runtime/platform/platform"
+import { createHomeController } from "@/home/model"
+import { createHomeScrollController } from "@/home/scroll"
+import { createHomeSessionsController } from "@/home/sessions/controller"
+import { createHomeSessionSearchController } from "@/home/sessions/search"
+import { HomeSessions } from "@/home/sessions/region"
 import type { NewSessionWorkspaceController } from "./workspace/controller"
 
 const providerTipDismissalDuration = 30 * 24 * 60 * 60 * 1000
@@ -37,6 +44,8 @@ export function NewSessionView(props: {
   project: PromptProjectController
   workspace: NewSessionWorkspaceController
 }) {
+  const platform = usePlatform()
+  const desktop = platform.platform === "desktop"
   const [onboarding, setOnboarding, , onboardingReady] = persisted(
     Persist.global("workspace-onboarding"),
     WorkspaceOnboardingSchema,
@@ -51,13 +60,20 @@ export function NewSessionView(props: {
     <div class="@container relative flex flex-col min-h-0 h-full flex-1">
       <div
         data-component="new-session"
-        class="relative flex-1 min-h-0 overflow-hidden rounded-[10px] bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]"
+        class="relative flex flex-col flex-1 min-h-0 overflow-hidden rounded-[10px] bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]"
       >
-        <div class="absolute inset-x-0 top-[25.375%] flex justify-center px-6">
+        <div
+          class={
+            desktop
+              ? "flex shrink-0 max-h-[50%] justify-center overflow-y-auto px-6 pt-8 pb-4"
+              : "absolute inset-x-0 top-[25.375%] flex justify-center px-6"
+          }
+        >
           <div class={NEW_SESSION_CONTENT_WIDTH}>
-            {/* Same size as the former wordmark so the composer stays centered. */}
-            <div class="aspect-[720/129] w-full" aria-hidden="true" />
-            <div class="mt-8 flex flex-col gap-8">
+            <Show when={!desktop}>
+              <div class="aspect-[720/129] w-full" aria-hidden="true" />
+            </Show>
+            <div class="flex flex-col gap-8" classList={{ "mt-8": !desktop }}>
               <Composer model={props.composer} />
               <Show when={props.project.empty()}>
                 <PromptProjectAddButton controller={props.project} />
@@ -94,9 +110,33 @@ export function NewSessionView(props: {
             </div>
           </div>
         </div>
+        <Show when={desktop}>
+          <NewSessionHistory />
+        </Show>
         <ProviderTip />
       </div>
     </div>
+  )
+}
+
+function NewSessionHistory() {
+  const home = createHomeController()
+  const sessions = createHomeSessionsController(home, { palette: false })
+  const search = createHomeSessionSearchController(home, sessions)
+  const scroll = createHomeScrollController(sessions.data.groups)
+  return (
+    <ScrollView
+      class="min-h-0 flex-1 [container-type:size] mb-12"
+      thumbContainer={scroll.viewport.thumbTrack()}
+      thumbHoverTarget={scroll.viewport.hoverTarget()}
+      viewportRef={scroll.viewport.setViewport}
+      onScroll={(event) => scroll.viewport.update(event.currentTarget.scrollTop)}
+      onWheel={scroll.viewport.containOuterWheel}
+    >
+      <div class="mx-auto flex min-h-full w-full max-w-[768px] px-6">
+        <HomeSessions sessions={sessions} search={search} scroll={scroll} canCreateSession={false} />
+      </div>
+    </ScrollView>
   )
 }
 

@@ -51,6 +51,7 @@ export function createSessionTimelineRowRenderer(input: {
   reasoningMode: Accessor<ReasoningMode>
   shellToolDefaultOpen: Accessor<boolean>
   editToolDefaultOpen: Accessor<boolean>
+  contextToolDefaultOpen?: Accessor<boolean>
   timelineDetail?: Accessor<TimelineDetail>
   disclosure: {
     value: (key: string) => boolean | undefined
@@ -185,7 +186,7 @@ export function createSessionTimelineRowRenderer(input: {
             input.disclosure.value(`patch:${path}`) ?? input.timelineDetail?.().edit.details === "expanded"
           }
           onFileOpenChange={(path, open) => input.disclosure.set(`patch:${path}`, open)}
-          open={input.disclosure.value(key()) === true}
+          open={input.disclosure.value(key()) ?? input.contextToolDefaultOpen?.() ?? false}
           busy={
             workingTurn(row().userMessageID) &&
             input.projection.lastAssistantGroupKey().get(row().userMessageID) === row().group.key

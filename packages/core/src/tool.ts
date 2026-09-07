@@ -3,6 +3,8 @@ export { CallID, Content, Error, FileContent, TextContent } from "@opencode-ai/s
 export type { Context, Metadata, Namespace, Options, Result } from "@opencode-ai/schema/tool"
 
 import { ToolDefinition, type ToolCall } from "@opencode-ai/ai"
+import { isRecord } from "@opencode-ai/ai/utils/record"
+import type { Config } from "@opencode-ai/schema/config"
 import { Tool } from "@opencode-ai/schema/tool"
 import { Context, Effect, Layer, Result, Schema, SchemaIssue, Types } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
@@ -16,6 +18,7 @@ import { SessionMessage } from "./session/message.js"
 import { SessionSchema } from "./session/schema.js"
 import { State } from "./state.js"
 import { definition, effectiveName, execute, normalizedName, normalizeContent } from "./tool/runtime.js"
+import { ToolReason } from "./tool/reason.js"
 import { Wildcard } from "./util/wildcard.js"
 
 export class RegistrationError extends Schema.TaggedError<RegistrationError>()("Tool.RegistrationError", {
@@ -39,7 +42,7 @@ type Data = {
 }
 
 export interface Interface extends State.Transformable<Editor> {
-  readonly snapshot: (permissions?: Permission.Ruleset) => Effect.Effect<Snapshot>
+  readonly snapshot: (permissions?: Permission.Ruleset, reason?: Config.Info["tool_reason"]) => Effect.Effect<Snapshot>
 }
 
 /** A local execution result after hooks and content normalization. */
@@ -217,7 +220,7 @@ const layer = Layer.effect(
     return Service.of({
       transform: state.transform,
       reload: state.reload,
-      snapshot: Effect.fn("Tool.snapshot")((permissions) =>
+      snapshot: Effect.fn("Tool.snapshot")((permissions?: Permission.Ruleset, reasonConfig?: Config.Info["tool_reason"]) =>
         Effect.sync(() => {
           const active = new Map<string, Tool.Info>()
           const rules = permissions ?? []
@@ -225,11 +228,11 @@ const layer = Layer.effect(
             if (whollyDisabled(tool.options?.permission ?? name, rules)) continue
             active.set(name, tool)
           }
-          const direct = new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode === false))
-          const codeModeTools = new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode !== false))
+          const direct = new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode !== true))
+          const codeModeTools = new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode === true))
           const namespaces = state.get().namespaces
           const codeModeInventory = { tools: codeModeTools, namespaces }
-          const codeModeEnabled = !whollyDisabled("execute", rules)
+          const codeModeEnabled = codeModeTools.size > 0 && !whollyDisabled("execute", rules)
           const codeModeTool = codeModeEnabled
             ? CodeModeTool.create(codeModeInventory, (name, tool, input, context) =>
                 beforeExecute(name, input, context).pipe(
@@ -238,33 +241,74 @@ const layer = Layer.effect(
               )
             : undefined
           const codeModeCatalog = codeModeEnabled ? CodeModeTool.catalog(codeModeInventory) : undefined
+          const advertised = [
+            ...Array.from(direct)
+              .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+              .map(([, tool]) => ToolReason.advertise(definition(tool), reasonConfig, normalizedName(tool))),
+            ...(codeModeTool ? [ToolReason.advertise(definition(codeModeTool), reasonConfig)] : []),
+          ]
+          const reasonFields = new Map(advertised.map((tool) => [tool.definition.name, tool.field]))
           return {
             ...(codeModeCatalog === undefined ? {} : { codeModeCatalog }),
-            definitions: [
-              ...Array.from(direct)
-                .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
-                .map(([, tool]) => definition(tool)),
-              ...(codeModeTool ? [definition(codeModeTool)] : []),
-            ],
+            definitions: advertised.map((tool) => tool.definition),
             execute: Effect.fnUntraced(function* (input: Parameters<Snapshot["execute"]>[0]) {
-              const context: Tool.Context = {
+              // Hooks may repair arguments in place; validate the reason that was durably called.
+              const args = isRecord(input.call.input) ? { ...input.call.input } : undefined
+              const event = yield* beforeExecute(input.call.name, input.call.input, {
                 sessionID: input.sessionID,
                 agent: input.agent,
                 messageID: input.messageID,
                 id: Tool.CallID.make(input.call.id),
                 progress: input.progress ?? (() => Effect.void),
-              }
-              const event = yield* beforeExecute(input.call.name, input.call.input, context)
+              })
               const requested = input.definitions?.get(event.tool)
+              const name = requested?.name ?? event.tool
               // Preserve session context removal and alias resolution, now after the repair hook.
               if (!requested && input.definitions && (direct.has(event.tool) || codeModeTool?.name === event.tool))
                 return yield* new Tool.Error({ message: `Tool is not available for this request: ${event.tool}` })
-              const name = requested?.name ?? event.tool
-              if (name === "execute" && codeModeTool)
-                return yield* executeTool(codeModeTool, name, event.input, context)
-              const tool = direct.get(name)
-              if (tool) return yield* executeTool(tool, name, event.input, context)
-              return yield* new Tool.Error({ message: `Unknown tool: ${name}` })
+              const tool = name === "execute" ? codeModeTool : direct.get(name)
+              if (!tool) return yield* new Tool.Error({ message: `Unknown tool: ${name}` })
+              const field = reasonFields.get(name)
+              // The original arguments are already durable. Metadata identifies the host field,
+              // rather than duplicating its value or guessing from implementation argument names.
+              const metadata = field ? { "opencode.reason": field } : undefined
+              const context: Tool.Context = {
+                sessionID: input.sessionID,
+                agent: input.agent,
+                messageID: input.messageID,
+                id: Tool.CallID.make(input.call.id),
+                progress: (update) => input.progress?.({ ...update, ...metadata }) ?? Effect.void,
+              }
+              if (metadata) yield* context.progress(metadata)
+              const reason = field ? args?.[field] : undefined
+              if (field && (typeof reason !== "string" || !reason.trim())) {
+                const failure = {
+                  message: `A short, nonempty reason is required in "${field}". Explain why this call is needed and retry with that argument.`,
+                  metadata,
+                }
+                return yield* (reasonConfig?.missing === "stop"
+                  ? new ToolReason.StopError(failure)
+                  : new Tool.Error(failure))
+              }
+              const result = yield* executeTool(
+                tool,
+                name,
+                field && isRecord(event.input)
+                  ? Object.fromEntries(Object.entries(event.input).filter(([key]) => key !== field))
+                  : event.input,
+                context,
+              ).pipe(
+                Effect.mapError((error) =>
+                  metadata
+                    ? new Tool.Error({
+                        message: error.message,
+                        error: error.error,
+                        metadata: { ...error.metadata, ...metadata },
+                      })
+                    : error,
+                ),
+              )
+              return metadata ? { ...result, metadata: { ...result.metadata, ...metadata } } : result
             }),
           }
         }),
@@ -294,8 +338,10 @@ function registrationError(tool: Tool.Info) {
   const name = normalizedName(tool)
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(name)) return new RegistrationError({ name, message: `Invalid tool name: ${name}` })
   const id = effectiveName(tool)
-  if (tool.options?.codemode === false && id === "execute")
+  if (tool.options?.codemode !== true && id === "execute")
     return new RegistrationError({ name: id, message: 'Tool name "execute" is reserved for CodeMode' })
+  if (tool.options?.pinned !== undefined && tool.options.codemode !== true)
+    return new RegistrationError({ name: id, message: "Pinned tools require codemode: true" })
   const result = Result.try({
     try: () => ToolDefinition.make(definition(tool)),
     catch: (error) =>

@@ -10,7 +10,7 @@ import {
   type ToolCall,
 } from "@opencode-ai/ai"
 import type { Agent } from "@opencode-ai/schema/agent"
-import { Cause, Data, Effect, Exit, Fiber, Option, Stream } from "effect"
+import { Cause, Data, Deferred, Effect, Exit, Fiber, Option, Stream } from "effect"
 import { SessionError } from "@opencode-ai/schema/session-error"
 import { Bus } from "../../bus.js"
 import { Permission } from "../../permission.js"
@@ -18,7 +18,8 @@ import { Snapshot } from "../../snapshot.js"
 import { Tool } from "../../tool.js"
 import { ToolOutput } from "../../tool-output.js"
 import { QuestionTool } from "../../tool/plugin/question.js"
-import { StepFailedError } from "../error.js"
+import { ToolReason } from "../../tool/reason.js"
+import { StepFailedError, UserInterruptedError } from "../error.js"
 import { SessionEvent } from "../event.js"
 import { SessionMessage } from "../message.js"
 import { SessionModelRequest } from "../model-request.js"
@@ -83,6 +84,8 @@ export const make = Effect.gen(function* () {
       readonly fiber: Fiber.Fiber<void, Permission.DeclinedError | QuestionTool.CancelledError>
     }> = []
     const interruptTools = Effect.suspend(() => Fiber.interruptAll(toolRuns.map((run) => run.fiber)))
+    const reasonStop = yield* Deferred.make<void>()
+    const stopForReason = Deferred.await(reasonStop).pipe(Effect.andThen(Effect.interrupt))
     const executeTool = (call: ToolCall) => {
       if (input.prepared.request.toolChoice?.type === "none")
         return new Tool.Error({ message: "Tools are disabled after the maximum agent steps" })
@@ -120,7 +123,10 @@ export const make = Effect.gen(function* () {
                 Effect.flatMap(toolOutput.truncate),
                 Effect.flatMap((outcome) => publisher.toolExecution(event.id, event.name, outcome)),
                 Effect.catchTag("Tool.Error", (error) =>
-                  publisher.failTool(event.id, toSessionError(error), error.metadata).pipe(Effect.asVoid),
+                  Effect.gen(function* () {
+                    yield* publisher.failTool(event.id, toSessionError(error), error.metadata)
+                    if (error instanceof ToolReason.StopError) yield* Deferred.succeed(reasonStop, undefined)
+                  }),
                 ),
               ),
             ).pipe(Effect.forkScoped),
@@ -133,14 +139,17 @@ export const make = Effect.gen(function* () {
     // Keep the final tool and Step events uninterruptible, even when the work itself is cancelled.
     return yield* Effect.uninterruptibleMask((restore) =>
       Effect.gen(function* () {
-        const stream = yield* restore(providerStream).pipe(Effect.exit)
+        const stream = yield* restore(providerStream.pipe(Effect.raceFirst(stopForReason))).pipe(Effect.exit)
         const streamFailure = Option.getOrUndefined(Exit.findErrorOption(stream))
         const streamInterrupted = Exit.hasInterrupts(stream)
         if (!overflowFailure && publisher.hasStarted()) yield* publisher.streamed()
         if (streamInterrupted) yield* interruptTools
-        const joined = yield* restore(Fiber.awaitAll(toolRuns.map((run) => run.fiber))).pipe(Effect.exit)
+        const joined = yield* restore(
+          Fiber.awaitAll(toolRuns.map((run) => run.fiber)).pipe(Effect.raceFirst(stopForReason)),
+        ).pipe(Effect.exit)
         if (Exit.isFailure(joined)) yield* interruptTools
         const tools = classifyToolExits(joined, toolRuns)
+        const reasonStopped = yield* Deferred.isDone(reasonStop)
 
         if (
           !publisher.record().outputStarted &&
@@ -170,7 +179,7 @@ export const make = Effect.gen(function* () {
         )
           return Outcome.RecoverFull()
         const retry =
-          llmFailure && llmError && !isContextOverflowFailure(llmFailure)
+          !reasonStopped && llmFailure && llmError && !isContextOverflowFailure(llmFailure)
             ? yield* restore(
                 input.retry(
                   llmFailure,
@@ -195,7 +204,7 @@ export const make = Effect.gen(function* () {
                 ? decline.reason.message
                 : "The user declined this tool call",
           })
-        const interrupted = tools.declines.length > 0 || streamInterrupted || tools.interrupted
+        const interrupted = reasonStopped || tools.declines.length > 0 || streamInterrupted || tools.interrupted
         const toolFailure = interrupted
           ? TOOLS_INTERRUPTED
           : tools.failure !== undefined
@@ -241,6 +250,7 @@ export const make = Effect.gen(function* () {
         }
 
         if (
+          !reasonStopped &&
           llmFailure &&
           llmError &&
           retry?.retry &&
@@ -250,6 +260,8 @@ export const make = Effect.gen(function* () {
         )
           return Outcome.Continue({ error: llmError, decision: retry })
 
+        // A policy stop is resumable, but must release the restart claim like a user stop.
+        if (reasonStopped) return yield* new UserInterruptedError({})
         if (Exit.isFailure(stream)) return yield* Effect.failCause(stream.cause)
         if (tools.declines.length > 0) return yield* Effect.interrupt
         if (tools.interrupted && tools.failure) return yield* Effect.failCause(tools.failure)

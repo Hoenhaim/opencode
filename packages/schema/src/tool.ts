@@ -29,14 +29,15 @@ interface BaseOptions {
   readonly permission?: string
 }
 
+/** Tools are exposed directly unless codemode is explicitly true. */
 export type Options = BaseOptions &
   (
     | {
-        readonly codemode?: true
+        readonly codemode: true
         readonly pinned?: boolean
       }
     | {
-        readonly codemode: boolean
+        readonly codemode?: boolean
         readonly pinned?: never
       }
   )

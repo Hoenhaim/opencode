@@ -526,7 +526,7 @@ export const layer = (options?: Options) =>
           // leaving it connected with a silently empty tool list and no path to recover.
           const result = yield* McpClient.connect(
             name,
-            entry.config,
+            { ...entry.config, codemode: entry.config.codemode ?? codemodeState.current },
             location.directory,
             authProvider,
             elicitation,

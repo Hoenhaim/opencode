@@ -109,6 +109,7 @@ export const layer = Layer.effect(
           bus.publish(SessionEvent.Execution.Started, { sessionID }, claimOnCommit(sessionID)),
         ),
       drain: (sessionID, force, promotable) => drain(sessionID, force, undefined, promotable),
+      stopOnError: (error) => error instanceof UserInterruptedError,
       // One terminal observation per busy period, covering every coalesced drain.
       settled: (sessionID, exit, reason) =>
         reportLifecycle(

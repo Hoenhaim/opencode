@@ -30,7 +30,7 @@ Leaves own resolution, permission, and side-effect ordering. Translate only expe
 
 ## Registration
 
-Built-ins, plugins, and MCP install tools through `Tool.Service.transform`, adding complete tool objects to the editor. A tool may provide a namespace, which flattens direct model names to `<namespace>_<tool>`, and defaults into CodeMode (`codemode` defaults true; `codemode: false` keeps the tool on the provider's native tool list).
+Built-ins, plugins, and MCP install tools through `Tool.Service.transform`, adding complete tool objects to the editor. A tool may provide a namespace, which flattens direct model names to `<namespace>_<tool>`, and defaults to the provider's native tool list. Only explicit `codemode: true` opts into CodeMode; `pinned` requires that opt-in. The CodeMode dispatcher is advertised only when at least one visible tool opts in and the dispatcher is not disabled by permissions.
 
 Namespace descriptions are registered once through `editor.namespace(...)`. Tool options continue to reference the namespace by string name; an unregistered namespace remains valid and simply has no namespace description.
 

@@ -74,6 +74,29 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   tool_output: ConfigToolOutput.Info.pipe(optional).annotate({
     description: "Tool output truncation thresholds",
   }),
+  tool_reason: Schema.Struct({
+    required: Schema.Boolean.pipe(optional).annotate({
+      description: "Require a short reason for model tool calls (default: true)",
+    }),
+    missing: Schema.Literals(["reject", "stop"]).pipe(optional).annotate({
+      description: "Reject invalid reasons with a tool error (default), or stop execution until resumed",
+    }),
+    rules: Schema.Array(
+      Schema.Struct({
+        tool: Schema.String,
+        required: Schema.Boolean,
+      }),
+    )
+      .pipe(optional)
+      .annotate({
+        description:
+          "Ordered wildcard rules for canonical tool names; last match wins. question and ask are exempt by default",
+      }),
+  })
+    .pipe(optional)
+    .annotate({
+      description: "Host-owned reasons for model tool calls; the highest-priority document replaces this setting",
+    }),
   mcp: ConfigMCP.Info.pipe(optional).annotate({
     description: "MCP server configuration",
   }),

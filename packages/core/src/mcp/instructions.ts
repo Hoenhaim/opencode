@@ -11,6 +11,7 @@ import { Instructions } from "../instructions/index.js"
 const Summary = Schema.Struct({
   server: Schema.String,
   instructions: Schema.String,
+  // Persisted summaries encode CodeMode by omission; keep historical instruction blobs readable.
   codemode: Schema.optionalKey(Schema.Literal(false)),
 })
 type Summary = typeof Summary.Type
@@ -88,7 +89,7 @@ export const layer = Layer.effect(
         const visible = instructions
           .flatMap((item) => {
             const owned = tools.filter((tool) => tool.server === item.server)
-            const codemode = owned[0]?.codemode !== false
+            const codemode = owned[0]?.codemode === true
             if (codemode && !canExecute) return []
             if (
               !owned.some(

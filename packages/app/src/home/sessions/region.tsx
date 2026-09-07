@@ -7,6 +7,7 @@ export function HomeSessions(props: {
   sessions: HomeSessionsController
   search: HomeSessionSearchController
   scroll: HomeScrollController
+  canCreateSession?: boolean
 }) {
   return (
     <HomeSessionsView
@@ -15,7 +16,7 @@ export function HomeSessions(props: {
       loading={props.sessions.data.loading()}
       showProjectName={props.sessions.session.showProjectName()}
       server={props.sessions.session.server()}
-      canCreateSession={props.sessions.session.canCreate()}
+      canCreateSession={props.canCreateSession ?? props.sessions.session.canCreate()}
       searchValue={props.search.query.value()}
       searchPlaceholder={props.search.query.placeholder()}
       searchOpen={props.search.query.open()}

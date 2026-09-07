@@ -49,6 +49,7 @@ import {
   currentToolMetadata,
   currentToolOutput,
   executeToolFailed,
+  toolReason,
 } from "../message/current-tool-state"
 import { AssistantReasoningContent, writeClipboard } from "../message/message-content"
 
@@ -590,6 +591,9 @@ export function CurrentContextToolGroup(props: {
 
   return (
     <div data-component="collapsed-tool-group" data-timeline-part-ids={props.parts.map((part) => part.id).join(",")}>
+      <For each={tools()}>
+        {(tool) => <ToolReason tool={tool.name} input={currentToolInput(tool)} metadata={currentToolMetadata(tool)} />}
+      </For>
       <BasicTool
         icon="glasses"
         status={pending() ? "running" : "completed"}
@@ -685,6 +689,7 @@ export function CurrentContextToolGroup(props: {
                                   when={tool().name === "patch" && tool().state.status !== "error"}
                                   fallback={
                                     <ToolDisplay
+                                      hideReason
                                       id={tool().id}
                                       tool={tool().name}
                                       input={currentToolInput(tool())}
@@ -702,6 +707,7 @@ export function CurrentContextToolGroup(props: {
                                   }
                                 >
                                   <CurrentFileToolGroup
+                                    hideReason
                                     tools={group()}
                                     fileOpen={
                                       props.fileOpen &&
@@ -802,6 +808,7 @@ export function CurrentContextToolGroup(props: {
 
 export function CurrentFileToolGroup(props: {
   tools: SessionMessageAssistantTool[]
+  hideReason?: boolean
   fileOpen?: (path: string) => boolean | undefined
   onFileOpenChange?: (path: string, open: boolean) => void
   onSizeChange?: () => void
@@ -844,6 +851,11 @@ export function CurrentFileToolGroup(props: {
       data-timeline-part-id={props.tools.length === 1 ? props.tools[0]?.id : undefined}
       data-timeline-part-ids={props.tools.length > 1 ? props.tools.map((tool) => tool.id).join(",") : undefined}
     >
+      <Show when={!props.hideReason}>
+        <For each={props.tools}>
+          {(tool) => <ToolReason tool={tool.name} input={currentToolInput(tool)} metadata={currentToolMetadata(tool)} />}
+        </For>
+      </Show>
       <Dynamic
         component={render}
         tool={tool()}
@@ -915,6 +927,7 @@ export interface ToolProps {
   output?: string
   status?: string
   hideDetails?: boolean
+  hideReason?: boolean
   defaultOpen?: boolean
   open?: boolean
   onOpenChange?: (open: boolean) => void
@@ -992,6 +1005,20 @@ function ToolFileAccordion(props: {
   )
 }
 
+function ToolReason(props: Pick<ToolProps, "tool" | "input" | "metadata">) {
+  const i18n = useI18n()
+  return (
+    <Show when={toolReason(props.input, props.metadata)}>
+      {(reason) => (
+        <div data-component="tool-reason">
+          <span>{i18n.t("ui.tool.reason", { tool: props.tool })}</span>{" "}
+          <bdi dir="auto">{reason()}</bdi>
+        </div>
+      )}
+    </Show>
+  )
+}
+
 export function ToolDisplay(
   props: ToolProps & {
     id: string
@@ -1000,7 +1027,6 @@ export function ToolDisplay(
 ) {
   const data = useData()
   const i18n = useI18n()
-  if (props.tool === "todowrite") return null
   const hideQuestion = () => props.tool === "question" && (props.status === "streaming" || props.status === "running")
   const taskId = createMemo(() => {
     if (props.tool !== "subagent") return undefined
@@ -1022,6 +1048,9 @@ export function ToolDisplay(
   return (
     <Show when={!hideQuestion()}>
       <div data-component="tool-part-wrapper" data-timeline-part-id={props.id}>
+        <Show when={!props.hideReason}>
+          <ToolReason tool={props.tool} input={props.input} metadata={props.metadata} />
+        </Show>
         <Switch>
           <Match when={error()}>
             {(error) => {

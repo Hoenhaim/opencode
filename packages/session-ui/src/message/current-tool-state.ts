@@ -14,6 +14,13 @@ export function currentToolMetadata(tool: SessionMessageAssistantTool): Record<s
   return tool.state.metadata ?? empty
 }
 
+export function toolReason(input: Record<string, unknown>, metadata: Record<string, unknown>) {
+  const field = metadata["opencode.reason"]
+  if (typeof field !== "string") return undefined
+  const reason = input[field]
+  return typeof reason === "string" ? reason.trim() || undefined : undefined
+}
+
 export function currentToolOutput(tool: SessionMessageAssistantTool) {
   if (tool.state.status === "running") {
     const output = tool.state.metadata.output

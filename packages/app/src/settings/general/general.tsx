@@ -540,6 +540,16 @@ export const SettingsGeneral: Component<{
                 onChange={settings.general.setTimelineDetail}
               />
             </div>
+            <SettingsRow
+              title={language.t("settings.timeline.exploredDefaultOpen.title")}
+              description={language.t("settings.timeline.exploredDefaultOpen.description")}
+            >
+              <Switch
+                aria-label={language.t("settings.timeline.exploredDefaultOpen.title")}
+                checked={settings.general.exploredDefaultOpen()}
+                onChange={settings.general.setExploredDefaultOpen}
+              />
+            </SettingsRow>
           </SettingsList>
         </section>
 

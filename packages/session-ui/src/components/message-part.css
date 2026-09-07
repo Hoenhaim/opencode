@@ -859,6 +859,22 @@
   width: 100%;
 }
 
+[data-component="tool-reason"] {
+  margin-block-end: 4px;
+  min-inline-size: 0;
+  font-family: var(--v2-font-family-sans);
+  font-size: 13px;
+  line-height: var(--line-height-compact);
+  color: var(--v2-text-text-muted);
+  overflow-wrap: anywhere;
+  -webkit-user-select: text;
+  user-select: text;
+
+  > span {
+    color: var(--v2-text-text-faint);
+  }
+}
+
 [data-component="dock-prompt"][data-kind="permission"] {
   position: relative;
   display: flex;

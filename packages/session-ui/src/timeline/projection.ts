@@ -8,7 +8,12 @@ import type {
 } from "@opencode-ai/client/promise"
 import { Option, Schema } from "effect"
 import { createMemo, mapArray, type Accessor } from "solid-js"
-import { currentContentDefaultOpen, currentToolFailed, currentToolHasLoadedFiles } from "../message/current-tool-state"
+import {
+  currentContentDefaultOpen,
+  currentToolFailed,
+  currentToolHasLoadedFiles,
+  currentToolMetadata,
+} from "../message/current-tool-state"
 import { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap } from "./timeline-row"
 import { timelineCategory, timelineNoticeRequired, type TimelineDetail } from "./detail"
 
@@ -584,7 +589,7 @@ function renderable(content: Content, showReasoning: boolean, detail?: TimelineD
   if (content.type === "reasoning")
     return (detail ? detail.thinking.placement !== "hidden" : showReasoning) && !!content.text.trim()
   if (detail && currentToolFailed(content)) return true
-  if (content.name === "todowrite") return false
+  if (content.name === "todowrite" && typeof currentToolMetadata(content)["opencode.reason"] !== "string") return false
   if (content.name === "question") return content.state.status !== "streaming" && content.state.status !== "running"
   if (detail && detail[timelineCategory(content)!].placement === "hidden") return false
   return true

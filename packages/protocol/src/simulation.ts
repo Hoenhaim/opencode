@@ -483,7 +483,7 @@ export namespace Backend {
         if (
           tools.some(
             (tool) =>
-              tool.name === "execute" && tool.options?.namespace === undefined && tool.options?.codemode === false,
+              tool.name === "execute" && tool.options?.namespace === undefined && tool.options?.codemode !== true,
           )
         )
           return 'direct simulated tool name "execute" is reserved'

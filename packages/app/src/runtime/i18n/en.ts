@@ -991,6 +991,9 @@ export const dict = {
   "settings.general.section.display": "Display",
 
   "settings.timeline.title": "Timeline",
+  "settings.timeline.exploredDefaultOpen.title": "Expand Explored by default",
+  "settings.timeline.exploredDefaultOpen.description":
+    "Open grouped activity automatically. You can still collapse individual groups.",
   "settings.timeline.detail": "Timeline detail",
   "settings.timeline.description": "Choose how much activity appears in the timeline. Messages stay visible.",
   "settings.timeline.preset.everything": "Everything",

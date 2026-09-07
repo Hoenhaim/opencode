@@ -444,7 +444,8 @@ function MessageTimelineView(
   const messageByID = projection.messageByID
   const virtualized = createTimelineVirtualizer({
     sessionKey: () => `${server.key}/${props.data.sessionID()}`,
-    presentationKey: () => JSON.stringify(props.data.timelineDetail()),
+    presentationKey: () => JSON.stringify([props.data.timelineDetail(), settings.general.exploredDefaultOpen()]),
+    contextToolDefaultOpen: settings.general.exploredDefaultOpen,
     projection,
     showHeader,
     pinned,
@@ -552,6 +553,7 @@ function MessageTimelineView(
     reasoningMode: props.data.reasoningMode,
     shellToolDefaultOpen: props.data.shellToolPartsExpanded,
     editToolDefaultOpen: props.data.editToolPartsExpanded,
+    contextToolDefaultOpen: settings.general.exploredDefaultOpen,
     timelineDetail: props.data.timelineDetail,
     disclosure: virtualized.disclosure,
     centered: () => props.centered,
