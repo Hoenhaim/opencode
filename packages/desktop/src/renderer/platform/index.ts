@@ -8,6 +8,7 @@ import type { ElectronAPI } from "../api-types"
 import { setPinchZoomEnabled, webviewZoom } from "../window/zoom"
 import { windowFullscreen } from "../window/fullscreen"
 import { setLastActiveUrl } from "../window/route-storage"
+import { DragCancelEvent } from "../../shared/ipc-transport"
 import { createDesktopFiles } from "./files"
 import { createDesktopMenuAction } from "./menu"
 import { createDesktopNotify } from "./notifications"
@@ -55,6 +56,10 @@ export function createDesktopPlatform(
     windowFullscreen,
     getPinchZoomEnabled: () => api.getPinchZoomEnabled(),
     setPinchZoomEnabled,
+    onDragCancel: (callback) => {
+      window.addEventListener(DragCancelEvent, callback)
+      return () => window.removeEventListener(DragCancelEvent, callback)
+    },
     runDesktopMenuAction: createDesktopMenuAction(api),
     createWindow: async (opts) => {
       if (opts.url) setLastActiveUrl(opts.id, opts.url)
