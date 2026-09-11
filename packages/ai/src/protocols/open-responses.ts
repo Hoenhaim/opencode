@@ -414,6 +414,7 @@ export interface ProviderAdapter {
     readonly request: LLMRequest
   }) => MediaInput | undefined
   readonly restoreHostedToolItem?: (item: unknown) => HostedToolReplayItem | undefined
+  readonly hoistToolResultImages?: boolean
 }
 
 const BASE_ADAPTER: ProviderAdapter = { id: ADAPTER, name: NAME }
@@ -609,11 +610,20 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (
 ) {
   const input: LoweredInputItem[] = []
   const providerMetadataKey = metadataKey(request.model)
+  const pendingImages: Array<Schema.Schema.Type<typeof OpenResponsesInputImage>> = []
+  const flushImages = () => {
+    if (pendingImages.length === 0) return
+    input.push({
+      role: "user",
+      content: [{ type: "input_text" as const, text: "Attached media from tool result:" }, ...pendingImages.splice(0)],
+    })
+  }
 
   for (const message of request.messages) {
     const metadata = yield* ProviderShared.validateWith(
       Schema.decodeUnknownEffect(Schema.UndefinedOr(MessageMetadata)),
     )(message.providerMetadata?.[providerMetadataKey])
+    if (message.role !== "tool") flushImages()
     if (message.role === "system") {
       input.push({
         role: "developer",
@@ -734,14 +744,27 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (
     for (const part of message.content) {
       if (!ProviderShared.supportsContent(part, ["tool-result"]))
         return yield* ProviderShared.unsupportedContent(adapter.name, "tool", ["tool-result"])
+      const output = yield* lowerToolResultOutput(part, request, adapter)
+      if (!adapter.hoistToolResultImages || !Array.isArray(output)) {
+        input.push({ type: "function_call_output", call_id: part.id, output })
+        continue
+      }
+      const images = output.filter((item) => item.type === "input_image")
+      if (images.length === 0) {
+        input.push({ type: "function_call_output", call_id: part.id, output })
+        continue
+      }
+      pendingImages.push(...images)
+      const kept = output.filter((item) => item.type !== "input_image")
       input.push({
         type: "function_call_output",
         call_id: part.id,
-        output: yield* lowerToolResultOutput(part, request, adapter),
+        output: kept.length === 0 ? "Media attached in the following user message." : kept,
       })
     }
   }
 
+  flushImages()
   return input
 })
 

@@ -5,6 +5,7 @@ import { Session } from "@opencode-ai/core/session"
 import { SessionContext } from "@opencode-ai/core/session/context"
 import { SessionHistory } from "@opencode-ai/core/session/history"
 import { InstructionEntry } from "@opencode-ai/core/session/instruction-entry"
+import { SessionProviderContext } from "@opencode-ai/core/session/provider-context"
 import { SessionStats } from "@opencode-ai/core/session/stats"
 import { SessionSystemPrompt } from "@opencode-ai/core/session/system-prompt"
 import { SessionTitle } from "@opencode-ai/core/session/title"
@@ -547,7 +548,16 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               missingSession(new Session.NotFoundError({ sessionID: error.sessionID })),
             ),
           )
-          const history = yield* SessionHistory.preview(database.db, selection.session.id, selection.instructions).pipe(
+          const boundary = yield* context.resolveModel(selection.session).pipe(
+            Effect.map((model) => SessionProviderContext.provenance(model) ?? "local"),
+            Effect.orElseSucceed(() => "local" as const),
+          )
+          const history = yield* SessionHistory.preview(
+            database.db,
+            selection.session.id,
+            selection.instructions,
+            boundary,
+          ).pipe(
             Effect.catchTag("Instructions.InitializationBlocked", (error) => {
               const ref = `err_${crypto.randomUUID().slice(0, 8)}`
               return Effect.logError("failed to assemble session system prompt", { cause: error }).pipe(

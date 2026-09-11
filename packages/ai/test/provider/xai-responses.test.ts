@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMEvent, Message } from "../../src/index.js"
+import { LLM, LLMEvent, Message, ToolCallPart } from "../../src/index.js"
 import { XAI } from "../../src/providers.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
 import { OpenAIResponses } from "../../src/protocols/openai-responses.js"
@@ -187,6 +187,198 @@ describe("xAI Responses route", () => {
         result: { type: "json", value: item },
         providerMetadata: { xai: { itemId: "x_search_1" } },
       })
+    }),
+  )
+
+  it.effect("hoists image tool results to a user message", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "read", input: {} })]),
+            Message.tool({
+              id: "call_1",
+              name: "read",
+              resultType: "content",
+              result: [
+                { type: "text", text: "Image read successfully" },
+                { type: "file", uri: "data:image/png;base64,AAECAw==", mime: "image/png" },
+              ],
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        { type: "function_call", call_id: "call_1", name: "read", arguments: "{}" },
+        {
+          type: "function_call_output",
+          call_id: "call_1",
+          output: [{ type: "input_text", text: "Image read successfully" }],
+        },
+        {
+          role: "user",
+          content: [
+            { type: "input_text", text: "Attached media from tool result:" },
+            { type: "input_image", image_url: "data:image/png;base64,AAECAw==" },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("leaves PDF tool results nested in function_call_output", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "read", input: {} })]),
+            Message.tool({
+              id: "call_1",
+              name: "read",
+              resultType: "content",
+              result: [
+                {
+                  type: "file",
+                  uri: "data:application/pdf;base64,JVBERi0xLjQ=",
+                  mime: "application/pdf",
+                  name: "report.pdf",
+                },
+              ],
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        { type: "function_call", call_id: "call_1", name: "read", arguments: "{}" },
+        {
+          type: "function_call_output",
+          call_id: "call_1",
+          output: [
+            {
+              type: "input_file",
+              filename: "report.pdf",
+              file_data: "data:application/pdf;base64,JVBERi0xLjQ=",
+            },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("hoists images from mixed tool results and keeps the PDF nested", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "read", input: {} })]),
+            Message.tool({
+              id: "call_1",
+              name: "read",
+              resultType: "content",
+              result: [
+                { type: "text", text: "Image read successfully" },
+                { type: "file", uri: "data:image/png;base64,AAECAw==", mime: "image/png" },
+                {
+                  type: "file",
+                  uri: "data:application/pdf;base64,JVBERi0xLjQ=",
+                  mime: "application/pdf",
+                  name: "report.pdf",
+                },
+              ],
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        { type: "function_call", call_id: "call_1", name: "read", arguments: "{}" },
+        {
+          type: "function_call_output",
+          call_id: "call_1",
+          output: [
+            { type: "input_text", text: "Image read successfully" },
+            {
+              type: "input_file",
+              filename: "report.pdf",
+              file_data: "data:application/pdf;base64,JVBERi0xLjQ=",
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            { type: "input_text", text: "Attached media from tool result:" },
+            { type: "input_image", image_url: "data:image/png;base64,AAECAw==" },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("collects parallel image tool results into one user message", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              ToolCallPart.make({ id: "call_1", name: "read", input: {} }),
+              ToolCallPart.make({ id: "call_2", name: "read", input: {} }),
+            ]),
+            Message.make({
+              role: "tool",
+              content: [
+                {
+                  type: "tool-result",
+                  id: "call_1",
+                  name: "read",
+                  result: {
+                    type: "content",
+                    value: [{ type: "file", uri: "data:image/png;base64,AAEC", mime: "image/png" }],
+                  },
+                },
+                {
+                  type: "tool-result",
+                  id: "call_2",
+                  name: "read",
+                  result: {
+                    type: "content",
+                    value: [{ type: "file", uri: "data:image/jpeg;base64,/9j/", mime: "image/jpeg" }],
+                  },
+                },
+              ],
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        { type: "function_call", call_id: "call_1", name: "read", arguments: "{}" },
+        { type: "function_call", call_id: "call_2", name: "read", arguments: "{}" },
+        {
+          type: "function_call_output",
+          call_id: "call_1",
+          output: "Media attached in the following user message.",
+        },
+        {
+          type: "function_call_output",
+          call_id: "call_2",
+          output: "Media attached in the following user message.",
+        },
+        {
+          role: "user",
+          content: [
+            { type: "input_text", text: "Attached media from tool result:" },
+            { type: "input_image", image_url: "data:image/png;base64,AAEC" },
+            { type: "input_image", image_url: "data:image/jpeg;base64,/9j/" },
+          ],
+        },
+      ])
     }),
   )
 })

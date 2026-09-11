@@ -1,8 +1,14 @@
 import { Schema } from "effect"
 import { Rpc, RpcGroup } from "effect/unstable/rpc"
-import { WindowTabSeed } from "./window"
+import { BrowserPaneEventSchema, BrowserPaneRpc } from "./browser"
 import { UpdaterStateSchema } from "./updater"
+import { WindowTabSeed } from "./window"
 import { WslServersEventSchema } from "./wsl"
+
+export class BrowserPaneEvent extends Schema.TaggedClass<BrowserPaneEvent>()("BrowserPaneEvent", {
+  bindingID: Schema.String,
+  event: BrowserPaneEventSchema,
+}) {}
 
 export class DeepLinksOpened extends Schema.TaggedClass<DeepLinksOpened>()("DeepLinksOpened", {
   urls: Schema.Array(Schema.String),
@@ -37,7 +43,16 @@ export class WindowTabAdopted extends Schema.TaggedClass<WindowTabAdopted>()("Wi
   screenX: Schema.optionalKey(Schema.Number),
 }) {}
 
+// Another window wrote to a storage namespace; recipients refresh their in-memory copy.
+export class StorageChanged extends Schema.TaggedClass<StorageChanged>()("StorageChanged", {
+  name: Schema.String,
+  insert: Schema.Record(Schema.String, Schema.String),
+  remove: Schema.Array(Schema.String),
+  revision: Schema.Number,
+}) {}
+
 export const DesktopEvent = Schema.Union([
+  BrowserPaneEvent,
   DeepLinksOpened,
   MenuCommandTriggered,
   UpdaterStateChanged,
@@ -46,8 +61,9 @@ export const DesktopEvent = Schema.Union([
   WindowPinchZoomChanged,
   WindowZoomChanged,
   WindowTabAdopted,
+  StorageChanged,
 ])
 export type DesktopEvent = Schema.Schema.Type<typeof DesktopEvent>
 
 export const DesktopEvents = Rpc.make("DesktopEvents", { success: DesktopEvent, stream: true })
-export const EventRpcs = RpcGroup.make(DesktopEvents)
+export const EventRpcs = RpcGroup.make(DesktopEvents, BrowserPaneRpc)

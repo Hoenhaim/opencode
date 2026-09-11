@@ -40,6 +40,8 @@ const XAIResponsesBody = Schema.Struct({
 const adapter = {
   id: ADAPTER,
   name: NAME,
+  // Grok sees user-role images but ignores `input_image` nested in function_call_output.
+  hoistToolResultImages: true,
   restoreHostedToolItem: (item: unknown) => (Schema.is(XAIResponsesHostedToolItem)(item) ? item : undefined),
 } satisfies OpenResponses.ProviderAdapter
 

@@ -23,7 +23,7 @@ export function advertise(tool: ToolDefinition, config: Config.Info["tool_reason
     field,
     definition: {
       ...tool,
-      description: `${tool.description}\n\nInclude ${field}: a short, nonempty reason explaining why this call helps the user's request. This host-only field is not sent to the tool.`,
+      description: `${tool.description}\n\nInclude ${field}: a short, nonempty English reason explaining why this call helps the user's request. This host-only field is not sent to the tool.`,
       inputSchema: {
         ...tool.inputSchema,
         properties: {
@@ -32,7 +32,8 @@ export function advertise(tool: ToolDefinition, config: Config.Info["tool_reason
             type: "string",
             minLength: 1,
             pattern: "\\S",
-            description: "Briefly explain why this tool call is needed for the user's request.",
+            description:
+              "Briefly explain why this tool call is needed for the user's request. Write the reason in English.",
           },
         },
         required: [...(Array.isArray(tool.inputSchema.required) ? tool.inputSchema.required : []), field],
