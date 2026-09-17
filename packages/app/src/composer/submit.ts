@@ -50,7 +50,7 @@ type ComposerSubmitInput = {
 }
 
 export function createComposerSubmit(input: ComposerSubmitInput) {
-  const submit = async (event: globalThis.Event, options?: { alternate?: boolean; delivery?: ComposerDelivery }) => {
+  const submit = async (event: globalThis.Event, options?: { alternate?: boolean }) => {
     event.preventDefault()
 
     const submission = createComposerSubmission({
@@ -63,7 +63,6 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
     })
     const value = readSubmission(input, submission.prompt, submission.context, {
       alternate: options?.alternate ?? false,
-      delivery: options?.delivery,
     })
     if (!value) {
       if (input.adapter.working() && input.adapter.kind === "active-session") void input.adapter.interrupt()
@@ -185,7 +184,7 @@ function readSubmission(
   input: ComposerSubmitInput,
   prompt: Prompt,
   context: ComposerSubmission["context"],
-  options: { alternate: boolean; delivery?: ComposerDelivery },
+  options: { alternate: boolean },
 ): ComposerSubmission | undefined {
   const text = prompt.map((part) => ("content" in part ? part.content : "")).join("")
   const mode = input.mode()
@@ -224,7 +223,7 @@ function readSubmission(
       model: { modelID: model.id, providerID: model.provider.id },
       variant,
     },
-    delivery: options.delivery ?? input.delivery?.(options.alternate) ?? "steer",
+    delivery: input.delivery?.(options.alternate) ?? "steer",
   }
 }
 
