@@ -88,8 +88,6 @@ import type {
   SessionBackgroundOutput,
   SessionMessageInput,
   SessionMessageOutput,
-  SessionMessageUpdateInput,
-  SessionMessageUpdateOutput,
   SessionEnvironmentInput,
   SessionEnvironmentOutput,
   SessionViewInput,
@@ -181,6 +179,8 @@ import type {
   PermissionGetOutput,
   PermissionReplyInput,
   PermissionReplyOutput,
+  PermissionRulesInput,
+  PermissionRulesOutput,
   FileReadInput,
   FileReadOutput,
   FileListInput,
@@ -571,6 +571,7 @@ export function make(options: ClientOptions) {
               model: input?.["model"],
               location: input?.["location"],
               metadata: input?.["metadata"],
+              permissions: input?.["permissions"],
             },
             successStatus: 200,
             declaredStatuses: [400, 401],
@@ -1001,18 +1002,6 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ).then((value) => value.data),
-      messageUpdate: (input: SessionMessageUpdateInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: SessionMessageUpdateOutput }>(
-          {
-            method: "PATCH",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/message/${encodeURIComponent(input.messageID)}`,
-            body: { content: input["content"] },
-            successStatus: 200,
-            declaredStatuses: [400, 401, 404, 409],
-            empty: false,
-          },
-          requestOptions,
-        ).then((value) => value.data),
       environment: (input: SessionEnvironmentInput, requestOptions?: RequestOptions) =>
         request<SessionEnvironmentOutput>(
           {
@@ -1044,7 +1033,7 @@ export function make(options: ClientOptions) {
           {
             method: "GET",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/message`,
-            query: { limit: input["limit"], order: input["order"], cursor: input["cursor"] },
+            query: { limit: input["limit"], order: input["order"], cursor: input["cursor"], type: input["type"] },
             successStatus: 200,
             declaredStatuses: [400, 401, 404, 500],
             empty: false,
@@ -1601,6 +1590,18 @@ export function make(options: ClientOptions) {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/permission/${encodeURIComponent(input.requestID)}/reply`,
             body: { reply: input["reply"], message: input["message"] },
+            successStatus: 204,
+            declaredStatuses: [400, 401, 404],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      rules: (input: PermissionRulesInput, requestOptions?: RequestOptions) =>
+        request<PermissionRulesOutput>(
+          {
+            method: "PUT",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/permission/rules`,
+            body: { permissions: input["permissions"] },
             successStatus: 204,
             declaredStatuses: [400, 401, 404],
             empty: true,

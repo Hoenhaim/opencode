@@ -3,7 +3,7 @@ import {
   ServerConnection,
   type Platform,
   type UpdaterPlatform,
-} from "@opencode-ai/app/desktop"
+} from "@opencode/app/desktop"
 import type { ElectronAPI } from "../api-types"
 import { setPinchZoomEnabled, webviewZoom } from "../window/zoom"
 import { windowFullscreen } from "../window/fullscreen"
@@ -81,6 +81,7 @@ export function createDesktopPlatform(
       await api.setDefaultServerUrl(url)
     },
     wslServers: os === "windows" ? api.wslServers : undefined,
+    sshServers: api.sshServers,
     webviewZoom,
     windowFullscreen,
     getPinchZoomEnabled: () => api.getPinchZoomEnabled(),

@@ -1,19 +1,19 @@
 import { Popover } from "@kobalte/core/popover"
 import { Component, ComponentProps, createEffect, createMemo, For, JSX, Show } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useLocal } from "@/providers/models/selection"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useLocal, type ModelSelection } from "@/providers/models/selection"
+import { useDialog } from "@opencode/ui/context/dialog"
 import { popularProviders } from "@/providers/catalog/providers"
-import { Button } from "@opencode-ai/ui/button"
-import { Badge } from "@opencode-ai/ui/badge"
-import { Dialog, DialogBody, DialogHeader, DialogTitle } from "@opencode-ai/ui/dialog"
-import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { ScrollView } from "@opencode-ai/ui/scroll-view"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { Menu } from "@opencode-ai/ui/menu"
-import { TextInput } from "@opencode-ai/ui/text-input"
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
+import { Button } from "@opencode/ui/button"
+import { Badge } from "@opencode/ui/badge"
+import { Dialog, DialogBody, DialogHeader, DialogTitle } from "@opencode/ui/dialog"
+import { Icon } from "@opencode/ui/icon"
+import { IconButton } from "@opencode/ui/icon-button"
+import { ScrollView } from "@opencode/ui/scroll-view"
+import { Tooltip } from "@opencode/ui/tooltip"
+import { Menu } from "@opencode/ui/menu"
+import { TextInput } from "@opencode/ui/text-input"
+import { ProviderIcon } from "@opencode/ui/provider-icon"
 import { ModelTooltip } from "./tooltip"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServerSDK } from "@/runtime/server/client"
@@ -58,7 +58,8 @@ function useRefreshModels() {
   return { refreshing: () => store.active, run }
 }
 
-type ModelState = ReturnType<typeof useLocal>["model"]
+type ModelState = ModelSelection
+
 type ModelItem = ReturnType<ModelState["list"]>[number]
 
 const modelKey = (model: ModelItem) => `${model.provider.id}:${model.id}`
@@ -346,7 +347,9 @@ function ModelSelectorPopoverView(props: {
 
   const models = createMemo(() => props.models(store.search))
   const groups = createMemo(() => props.groups(models()))
-  const keys = () => [...models().map(modelKey), refreshKey, manageKey]
+
+  const keys = () => [...groups().flatMap((group) => group.items.map(modelKey)), refreshKey, manageKey]
+
   const initialActive = () => {
     const selected = props.current
     const options = keys()

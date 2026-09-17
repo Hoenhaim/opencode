@@ -1,9 +1,9 @@
 export * as SessionRunnerModel from "./model.js"
 
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { LanguageModel } from "@opencode-ai/ai"
-import { Model } from "@opencode-ai/schema/model"
-import { Provider } from "@opencode-ai/schema/provider"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { LanguageModel } from "@opencode/ai"
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
 import { Context, Effect, Layer, Schema } from "effect"
 import { ModelResolver } from "../../model-resolver.js"
 import { SessionSchema } from "../schema.js"
@@ -33,6 +33,10 @@ export const VariantUnavailableError = ModelResolver.VariantUnavailableError
 export type VariantUnavailableError = ModelResolver.VariantUnavailableError
 export const UnsupportedPackageError = ModelResolver.UnsupportedPackageError
 export type UnsupportedPackageError = ModelResolver.UnsupportedPackageError
+export const ModelConfigurationError = ModelResolver.ModelConfigurationError
+export type ModelConfigurationError = ModelResolver.ModelConfigurationError
+export const ModelInitializationError = ModelResolver.ModelInitializationError
+export type ModelInitializationError = ModelResolver.ModelInitializationError
 export const UnresolvedProviderVariablesError = ModelResolver.UnresolvedProviderVariablesError
 export type UnresolvedProviderVariablesError = ModelResolver.UnresolvedProviderVariablesError
 export const UnsupportedCompactionError = ModelResolver.UnsupportedCompactionError
@@ -60,6 +64,7 @@ export const resolved = (
     readonly cost: Model.Info["cost"]
     readonly limit: Model.Info["limit"]
     readonly compaction?: Provider.Compaction
+    readonly websocket?: boolean
   },
 ): Resolved => ({
   model,
@@ -72,6 +77,7 @@ export const resolved = (
   cost: options.cost,
   limit: options.limit,
   compaction: options.compaction,
+  websocket: options.websocket ?? false,
 })
 
 const layer = Layer.effect(

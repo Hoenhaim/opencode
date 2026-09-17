@@ -1,21 +1,10 @@
+import { sync, syncCall } from "../interpreter/host.js"
 import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
-import { isBlockedMember, type SafeObject } from "../tool-runtime.js"
-import { CodeModeRegExp } from "../values.js"
+import { ProgramArray, record, set } from "../interpreter/objects.js"
+import { Values } from "../values.js"
 import { coerceToNumber, coerceToString } from "./value.js"
 
-type MatchValue = Array<unknown> & {
-  index?: number
-  groups?: SafeObject
-  indices?: IndicesValue
-}
-
-type IndicesValue = Array<unknown> & {
-  groups?: SafeObject
-}
-
 export const regexpMethods = new Set(["test", "exec", "toString"])
-
-export const regexpStatics = new Set(["escape"])
 
 export const regexpProperties = new Set([
   "source",
@@ -31,16 +20,16 @@ export const regexpProperties = new Set([
   "dotAll",
 ])
 
-export const regexFailureReason = (error: unknown): string =>
+const regexFailureReason = (error: unknown): string =>
   (error instanceof Error ? error.message : String(error)).replace(/^Invalid regular expression:\s*/i, "")
 
-export const escapeRegexHint =
+const escapeRegexHint =
   'To match special characters like ( ) [ ] { } + * ? . literally, escape them with a backslash (e.g. "\\\\(") or test for them with String.includes instead.'
 
 export const toHostRegex = (arg: unknown, method: string, node: AstNode, extraFlags = ""): RegExp => {
   // Native parity: an undefined pattern behaves as an empty pattern.
   if (arg === undefined) return new RegExp("", extraFlags)
-  if (arg instanceof CodeModeRegExp) return arg.regex
+  if (arg instanceof Values.RegExp) return arg.regex
   if (typeof arg === "string") {
     try {
       return new RegExp(arg, extraFlags)
@@ -57,30 +46,55 @@ export const toHostRegex = (arg: unknown, method: string, node: AstNode, extraFl
   )
 }
 
-export const matchToValue = (match: RegExpMatchArray): Array<unknown> => {
-  const result: MatchValue = Array.from(match, (group) => group)
-  if (match.index !== undefined) result.index = match.index
-  if (match.groups) {
-    const groups: SafeObject = Object.create(null) as SafeObject
-    for (const [key, group] of Object.entries(match.groups)) {
-      if (!isBlockedMember(key)) groups[key] = group
-    }
-    result.groups = groups
-  }
-  if (match.indices) result.indices = indicesToValue(match.indices)
+export const matchToValue = (match: RegExpMatchArray): ProgramArray => {
+  const result = new ProgramArray(Array.from(match, (group) => group))
+  if (match.index !== undefined) set(result, "index", match.index)
+  if (match.input !== undefined) set(result, "input", match.input)
+  if (match.groups) set(result, "groups", record(match.groups))
+  if (match.indices) set(result, "indices", indicesToValue(match.indices))
   return result
 }
 
-export const invokeRegExpStatic = (name: string, args: Array<unknown>, node: AstNode): string => {
-  if (name !== "escape") throw new InterpreterRuntimeError(`RegExp.${name} is not available.`, node)
-  if (typeof args[0] !== "string") {
-    throw new InterpreterRuntimeError("RegExp.escape expects a string.", node).as("TypeError")
+export const constructRegExp = (args: Array<unknown>, node: AstNode): Values.RegExp => {
+  const first = args[0]
+  const pattern = first instanceof Values.RegExp ? first.regex.source : first === undefined ? "" : coerceToString(first)
+  const flagsArg = args[1]
+  if (flagsArg !== undefined && typeof flagsArg !== "string") {
+    throw new InterpreterRuntimeError(
+      `RegExp flags must be a string of flag characters (e.g. "g", "gi"), not ${flagsArg === null ? "null" : typeof flagsArg}.`,
+      node,
+    ).as("SyntaxError")
   }
-  return RegExp.escape(args[0])
+  const flags = flagsArg ?? (first instanceof Values.RegExp ? first.regex.flags : "")
+  try {
+    return new Values.RegExp(pattern, flags)
+  } catch (error) {
+    const reason = regexFailureReason(error)
+    throw new InterpreterRuntimeError(
+      /flag/i.test(reason)
+        ? `new RegExp(...) received invalid flags ${JSON.stringify(flags)} (${reason}). Valid flags are d, g, i, m, s, u, v, and y.`
+        : `new RegExp(...) received ${JSON.stringify(pattern)}, which is not a valid regular expression pattern (${reason}). ${escapeRegexHint}`,
+      node,
+    ).as("SyntaxError")
+  }
 }
 
+// RegExp constructs identically with or without new, like JS.
+export const regexpGlobal = sync("RegExp", constructRegExp, {
+  construct: syncCall(constructRegExp),
+  instanceOf: (value) => value instanceof Values.RegExp,
+  members: {
+    escape: sync("RegExp.escape", (args, node) => {
+      if (typeof args[0] !== "string") {
+        throw new InterpreterRuntimeError("RegExp.escape expects a string.", node).as("TypeError")
+      }
+      return RegExp.escape(args[0])
+    }),
+  },
+})
+
 export const invokeRegExpMethod = (
-  value: CodeModeRegExp,
+  value: Values.RegExp,
   name: string,
   args: Array<unknown>,
   node: AstNode,
@@ -114,16 +128,16 @@ const toLength = (value: unknown): number => {
   return Math.min(Math.floor(number), Number.MAX_SAFE_INTEGER)
 }
 
-const indicesToValue = (indices: RegExpIndicesArray): IndicesValue => {
-  const result: IndicesValue = Array.from(indices, (range) => (range === undefined ? undefined : [...range]))
-  if (indices.groups) {
-    const groups: SafeObject = Object.create(null) as SafeObject
-    for (const [key, range] of Object.entries(indices.groups)) {
-      if (!isBlockedMember(key)) groups[key] = range === undefined ? undefined : [...range]
-    }
-    result.groups = groups
-    return result
-  }
-  result.groups = undefined
+const indicesToValue = (indices: RegExpIndicesArray): ProgramArray => {
+  const range = (pair: [number, number] | undefined) => (pair === undefined ? undefined : new ProgramArray([...pair]))
+  const result = new ProgramArray(Array.from(indices, range))
+  const groups = indices.groups
+  set(
+    result,
+    "groups",
+    groups === undefined
+      ? undefined
+      : record(Object.fromEntries(Object.entries(groups).map(([key, pair]) => [key, range(pair)]))),
+  )
   return result
 }

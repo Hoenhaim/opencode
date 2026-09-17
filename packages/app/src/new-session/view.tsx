@@ -1,7 +1,6 @@
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { Icon } from "@opencode-ai/ui/icon"
-import { ScrollView } from "@opencode-ai/ui/scroll-view"
+import { useDialog } from "@opencode/ui/context/dialog"
+import { Tooltip } from "@opencode/ui/tooltip"
+import { Icon } from "@opencode/ui/icon"
 import { Show, createEffect, createMemo, createSignal } from "solid-js"
 import { Schema } from "effect"
 import createPresence from "solid-presence"
@@ -29,6 +28,7 @@ import { createHomeSessionsController } from "@/home/sessions/controller"
 import { createHomeSessionSearchController } from "@/home/sessions/search"
 import { HomeSessions } from "@/home/sessions/region"
 import type { NewSessionWorkspaceController } from "./workspace/controller"
+import { ScrollView } from "@opencode/ui/scroll-view"
 
 const providerTipDismissalDuration = 30 * 24 * 60 * 60 * 1000
 

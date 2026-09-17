@@ -1,7 +1,7 @@
 export * as Config from "."
 
 import { createBindingLookup } from "@opentui/keymap/extras"
-import { Vcs } from "@opencode-ai/schema/vcs"
+import { Vcs } from "@opencode/schema/vcs"
 import { Schema } from "effect"
 import { createContext, onCleanup, type JSX, useContext } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
@@ -168,6 +168,9 @@ export const Info = Schema.Struct({
       new_location: Schema.optional(Schema.Literals(["launch", "inherit"])).annotate({
         description: "Start new sessions in the TUI launch directory or inherit the active session location",
       }),
+      permissions: Schema.optional(Schema.Literals(["prompt", "autoaccept"])).annotate({
+        description: "Prompt for permission requests or accept them automatically",
+      }),
     }),
   ).annotate({ description: "Session transcript presentation settings" }),
   tabs: Schema.optional(
@@ -190,6 +193,9 @@ export const Info = Schema.Struct({
     Schema.Struct({
       thinking: Schema.optional(Schema.Literals(["show", "hide"])).annotate({
         description: "Show or hide model reasoning",
+      }),
+      tools: Schema.optional(Schema.Literals(["show", "hide"])).annotate({
+        description: "Show or hide tool calls and the assistant text that precedes them",
       }),
       shell_output: Schema.optional(Schema.Literals(["show", "hide"])).annotate({
         description: "Show or hide raw shell tool output",
@@ -251,8 +257,9 @@ export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader"
     style: "block" | "underline" | "line" | "default"
     blinking: boolean
   }
-  session: Omit<NonNullable<Info["session"]>, "new_location" | "tps"> & {
+  session: Omit<NonNullable<Info["session"]>, "new_location" | "permissions" | "tps"> & {
     new_location: "launch" | "inherit"
+    permissions: "prompt" | "autoaccept"
     tps: boolean
   }
   tabs: {
@@ -299,6 +306,7 @@ export function resolve(input: Info, options: { terminalSuspend: boolean }): Res
     session: {
       ...input.session,
       new_location: input.session?.new_location ?? "launch",
+      permissions: input.session?.permissions ?? "prompt",
       // Persistent terminal panes need the opencode-pty daemon, which does not ship Windows binaries.
       terminal: input.session?.terminal ?? process.platform !== "win32",
       tps: input.session?.tps ?? true,

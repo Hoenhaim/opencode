@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
-import type { OpenCodeEvent } from "@opencode-ai/client"
+import type { OpenCodeEvent } from "@opencode/client"
 import { testRender } from "@opentui/solid"
 import { mkdirSync, watch } from "fs"
 import path from "path"
@@ -260,6 +260,23 @@ test("loads VCS metadata for each persisted tab location", async () => {
   try {
     await wait(() => setup.locations.includes(other))
     await wait(() => setup.vcsLocations.includes(other))
+  } finally {
+    await setup.destroy()
+  }
+})
+
+test("opens a background tab without changing the current session", async () => {
+  const setup = await renderSessionTabs("first")
+
+  try {
+    await wait(() => setup.tabs.current() === "first" && setup.tabs.tabs().some((tab) => tab.sessionID === "first"))
+    setup.tabs.open("background")
+    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "background"))
+
+    expect(setup.tabs.current()).toBe("first")
+    expect(setup.tabs.isPreview("background")).toBe(false)
+    setup.tabs.move("background", 0)
+    await wait(() => setup.tabs.tabs()[0]?.sessionID === "background")
   } finally {
     await setup.destroy()
   }

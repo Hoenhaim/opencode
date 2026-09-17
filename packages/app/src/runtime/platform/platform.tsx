@@ -1,9 +1,10 @@
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@opencode/ui/context"
 import type { AsyncStorage, SyncStorage } from "@solid-primitives/storage"
 import type { Accessor } from "solid-js"
 import type { DesktopMenuAction } from "@/shell/commands/desktop-menu"
 import { ServerConnection } from "@/runtime/server/registry"
 import type { WslServersPlatform } from "@/servers/wsl/types"
+import type { SshPlatform } from "@/servers/ssh/types"
 import type { UpdaterPlatform } from "@/shell/updates/types"
 import type { DraftStore } from "@/runtime/persistence/drafts"
 import type { BrowserPanePlatform } from "./browser-pane"
@@ -89,6 +90,7 @@ type PlatformBase = {
 
   /** Manage WSL sidecar servers (Electron on Windows only) */
   wslServers?: WslServersPlatform
+  sshServers?: SshPlatform
 
   /** Webview zoom level (desktop only) */
   webviewZoom?: Accessor<number>

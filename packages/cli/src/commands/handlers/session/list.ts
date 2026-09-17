@@ -1,5 +1,5 @@
-import { OpenCode, type SessionInfo } from "@opencode-ai/client"
-import { Service } from "@opencode-ai/client/effect/service"
+import { OpenCode, type SessionInfo } from "@opencode/client"
+import { Service } from "@opencode/client/effect/service"
 import { Effect, Option, Stream } from "effect"
 import { EOL } from "node:os"
 import { Commands } from "../../commands"
@@ -47,7 +47,7 @@ const handler = Effect.fn("cli.session.list")(function* (
           null,
           2,
         )
-      : formatTable(page.data)) + EOL
+      : formatList(page.data)) + EOL
   const write = Effect.tryPromise(
     () =>
       new Promise<void>((resolve, reject) => {
@@ -59,8 +59,8 @@ const handler = Effect.fn("cli.session.list")(function* (
     return
   }
 
-  const { AppProcess } = yield* Effect.promise(() => import("@opencode-ai/util/process"))
-  const { LayerNode } = yield* Effect.promise(() => import("@opencode-ai/util/effect/layer-node"))
+  const { AppProcess } = yield* Effect.promise(() => import("@opencode/util/process"))
+  const { LayerNode } = yield* Effect.promise(() => import("@opencode/util/effect/layer-node"))
   const { ChildProcess } = yield* Effect.promise(() => import("effect/unstable/process"))
   yield* Effect.gen(function* () {
     const processService = yield* AppProcess.Service
@@ -96,18 +96,14 @@ export default Runtime.handler(Commands.commands.session.commands.list, (input) 
   ),
 )
 
-function formatTable(sessions: ReadonlyArray<SessionInfo>) {
-  const rows = sessions.map((session) => ({
-    id: session.id,
-    title: (session.title ?? "Untitled session").replace(/[\r\n\t]/g, " "),
-    updated: new Date(session.time.updated).toLocaleString(),
-  }))
-  const idWidth = Math.max(20, ...rows.map((row) => row.id.length))
-  const titleWidth = Math.max(25, ...rows.map((row) => row.title.length))
-  const header = `${"Session ID".padEnd(idWidth)}  ${"Title".padEnd(titleWidth)}  Updated`
-  return [
-    header,
-    "─".repeat(header.length),
-    ...rows.map((row) => `${row.id.padEnd(idWidth)}  ${row.title.padEnd(titleWidth)}  ${row.updated}`),
-  ].join(EOL)
+function formatList(sessions: ReadonlyArray<SessionInfo>) {
+  return sessions
+    .map((session) =>
+      [
+        session.id,
+        (session.title ?? "Untitled session").replace(/[\r\n\t]/g, " "),
+        new Date(session.time.updated).toLocaleString(),
+      ].join("\t"),
+    )
+    .join(EOL)
 }

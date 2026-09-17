@@ -4,6 +4,9 @@ import { BrowserPaneEventSchema, BrowserPaneRpc } from "./browser"
 import { UpdaterStateSchema } from "./updater"
 import { WindowTabSeed } from "./window"
 import { WslServersEventSchema } from "./wsl"
+import { SshState } from "@opencode/app/ssh"
+
+export class SshChanged extends Schema.TaggedClass<SshChanged>()("SshChanged", { state: SshState }) {}
 
 export class BrowserPaneEvent extends Schema.TaggedClass<BrowserPaneEvent>()("BrowserPaneEvent", {
   bindingID: Schema.String,
@@ -57,6 +60,7 @@ export const DesktopEvent = Schema.Union([
   MenuCommandTriggered,
   UpdaterStateChanged,
   WslServersChanged,
+  SshChanged,
   WindowFullscreenChanged,
   WindowPinchZoomChanged,
   WindowZoomChanged,

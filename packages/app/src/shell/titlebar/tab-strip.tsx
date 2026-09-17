@@ -12,7 +12,7 @@ import { useGlobal, useServerCtx, type ServerCtx } from "@/runtime/server/runtim
 import { useLanguage } from "@/runtime/i18n/language"
 import { useCommand } from "@/shell/commands/command"
 import { createTabComposerState } from "@/composer/persistence"
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode } from "@opencode/util/encode"
 import { showToast } from "@/shell/notifications/toast"
 import { canMoveTabToNewWindow } from "@/shell/tabs/tear-off"
 import { createTabDragGhost, moveTabDragGhost, removeTabDragGhost, setTabDragging } from "./tab-drag-ghost"
@@ -25,7 +25,7 @@ import {
 } from "./tab-gesture"
 import { restrictTabDragToStrip } from "./tab-strip-modifier"
 import { adjacentTabKey, mergeVisibleTabOrder } from "./tab-order"
-import type { SessionInfo } from "@opencode-ai/client/promise"
+import type { SessionInfo } from "@opencode/client/promise"
 
 function SessionTabSlot(props: {
   tab: SessionTab

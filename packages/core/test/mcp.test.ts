@@ -13,30 +13,30 @@ import {
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js"
-import { Document, Event, Info } from "@opencode-ai/schema/config"
-import { ConfigMCP } from "@opencode-ai/schema/config/mcp"
-import { McpEvent } from "@opencode-ai/schema/mcp-event"
-import { Config } from "@opencode-ai/core/config"
-import { ConfigMcpPlugin } from "@opencode-ai/core/config/plugin/mcp"
-import { Credential } from "@opencode-ai/core/credential"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { Bus } from "@opencode-ai/core/bus"
-import { ID, type Payload } from "@opencode-ai/schema/event"
-import { Form } from "@opencode-ai/core/form"
-import { Integration } from "@opencode-ai/core/integration"
-import { Environment } from "@opencode-ai/core/environment/index"
-import { EnvironmentUnavailable } from "@opencode-ai/core/environment/unavailable"
-import { Location } from "@opencode-ai/core/location"
-import { Mcp } from "@opencode-ai/core/mcp/index"
-import { McpClient } from "@opencode-ai/core/mcp/client"
-import { McpStdio } from "@opencode-ai/core/mcp/stdio"
-import { Permission } from "@opencode-ai/core/permission"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { Session } from "@opencode-ai/core/session"
-import { State } from "@opencode-ai/core/state"
-import { McpTool } from "@opencode-ai/core/tool/mcp"
-import { Tool } from "@opencode-ai/core/tool"
+import { Document, Event, Info } from "@opencode/schema/config"
+import { ConfigMCP } from "@opencode/schema/config/mcp"
+import { McpEvent } from "@opencode/schema/mcp-event"
+import { Config } from "@opencode/core/config"
+import { ConfigMcpPlugin } from "@opencode/core/config/plugin/mcp"
+import { Credential } from "@opencode/core/credential"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Bus } from "@opencode/core/bus"
+import { ID, type Payload } from "@opencode/schema/event"
+import { Form } from "@opencode/core/form"
+import { Integration } from "@opencode/core/integration"
+import { Environment } from "@opencode/core/environment/index"
+import { EnvironmentUnavailable } from "@opencode/core/environment/unavailable"
+import { Location } from "@opencode/core/location"
+import { Mcp } from "@opencode/core/mcp/index"
+import { McpClient } from "@opencode/core/mcp/client"
+import { McpStdio } from "@opencode/core/mcp/stdio"
+import { Permission } from "@opencode/core/permission"
+import { AbsolutePath } from "@opencode/core/schema"
+import { Session } from "@opencode/core/session"
+import { State } from "@opencode/core/state"
+import { McpTool } from "@opencode/core/tool/mcp"
+import { Tool } from "@opencode/core/tool"
 import {
   Context,
   Deferred,
@@ -55,7 +55,7 @@ import {
 import { TestClock } from "effect/testing"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { ExitCode, makeHandle, ProcessId } from "effect/unstable/process/ChildProcessSpawner"
-import { Image } from "@opencode-ai/core/image"
+import { Image } from "@opencode/core/image"
 import { advance, drain } from "./lib/clock"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
@@ -325,6 +325,32 @@ const mcp = Layer.mock(Mcp.Service, {
         inputSchema: { type: "object", properties: {} },
       }),
       new Mcp.Tool({
+        server: Mcp.ServerName.make("demo"),
+        name: "issues",
+        description: "Returns JSON as text",
+        inputSchema: { type: "object", properties: {} },
+      }),
+      new Mcp.Tool({
+        server: Mcp.ServerName.make("demo"),
+        name: "count",
+        description: "Returns a number as text",
+        inputSchema: { type: "object", properties: {} },
+      }),
+      new Mcp.Tool({
+        server: Mcp.ServerName.make("demo"),
+        name: "typed",
+        description: "Declares a string output and returns JSON as text",
+        inputSchema: { type: "object", properties: {} },
+        outputSchema: { type: "string" },
+      }),
+      new Mcp.Tool({
+        server: Mcp.ServerName.make("direct"),
+        name: "issues",
+        codemode: false,
+        description: "Returns JSON as text",
+        inputSchema: { type: "object", properties: {} },
+      }),
+      new Mcp.Tool({
         server: Mcp.ServerName.make("direct"),
         name: "lookup",
         codemode: false,
@@ -373,6 +399,20 @@ const mcp = Layer.mock(Mcp.Service, {
           tool: input.name,
           isError: false,
           content: [{ type: "text", text: "hello" }],
+        })
+      if (input.name === "issues" || input.name === "typed")
+        return new Mcp.ToolResult({
+          server: Mcp.ServerName.make(input.server),
+          tool: input.name,
+          isError: false,
+          content: [{ type: "text", text: '{"issues":[{"id":1}]}' }],
+        })
+      if (input.name === "count")
+        return new Mcp.ToolResult({
+          server: Mcp.ServerName.make(input.server),
+          tool: input.name,
+          isError: false,
+          content: [{ type: "text", text: "42" }],
         })
       return new Mcp.ToolResult({
         server: Mcp.ServerName.make(input.server),
@@ -1943,6 +1983,7 @@ it.effect("advertises MCP output schemas to Code Mode", () =>
 
     expect(toolSet.definitions.map((tool) => tool.name)).toEqual([
       "direct_fail",
+      "direct_issues",
       "direct_lookup",
       "direct_media",
       "execute",
@@ -2030,6 +2071,39 @@ it.effect("returns content-only MCP results through Code Mode", () =>
       output: { output: "hello", toolCalls: [{ tool: "demo.status", status: "completed" }] },
       content: [{ type: "text", text: "hello" }],
     })
+  }),
+)
+
+it.effect("parses JSON text results from MCP tools without an output schema", () =>
+  Effect.gen(function* () {
+    assertion = yield* Deferred.make<Permission.AssertInput>()
+    decision = Effect.void
+    const registry = yield* Tool.Service
+    const registration = yield* McpTool.Service
+    yield* registration.flush
+    const toolSet = yield* registry.snapshot()
+
+    const run = (code: string) =>
+      toolSet
+        .execute({
+          sessionID: Session.ID.make("ses_mcp_json_text"),
+          ...toolIdentity,
+          call: { type: "tool-call", id: `call_${code.length}`, name: "execute", input: { code } },
+        })
+        .pipe(Effect.map((execution) => execution.output.output))
+
+    expect(yield* run("return (await tools.demo.issues({})).issues[0].id")).toBe("1")
+    expect(yield* run("return typeof (await tools.demo.count({}))")).toBe("string")
+    expect(yield* run("return typeof (await tools.demo.typed({}))")).toBe("string")
+
+    // Outside Code Mode the content the model reads is the original text.
+    expect(
+      yield* toolSet.execute({
+        sessionID: Session.ID.make("ses_mcp_json_text"),
+        ...toolIdentity,
+        call: { type: "tool-call", id: "call_direct_issues", name: "direct_issues", input: {} },
+      }),
+    ).toMatchObject({ output: { issues: [{ id: 1 }] }, content: [{ type: "text", text: '{"issues":[{"id":1}]}' }] })
   }),
 )
 

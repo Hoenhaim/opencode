@@ -1,11 +1,19 @@
 import { Effect } from "effect"
 import type { Diagnostic } from "../codemode.js"
 import { ToolError } from "../tool-error.js"
-import { copyOut, ToolRuntimeError, type SafeObject } from "../tool-runtime.js"
+import { toData, ToolRuntimeError } from "../data.js"
 import { type AstNode, formatLocation, InterpreterRuntimeError, ProgramThrow, sourceLocation } from "./model.js"
 import { containsRuntimeReference } from "./references.js"
-import { type SyncIteratorRunner } from "./iterator.js"
-import { coerceToString, createAggregateErrorValue, createErrorValue, errorConstructors } from "../stdlib/value.js"
+import { type HostCall, HostFunction } from "./host.js"
+import { get, ProgramError, ProgramObject } from "./objects.js"
+import { type Runner } from "./runner.js"
+import {
+  coerceToString,
+  createAggregateErrorValue,
+  createErrorValue,
+  errorBrandName,
+  errorConstructors,
+} from "../stdlib/value.js"
 
 export const normalizeError = (error: unknown): Diagnostic => {
   if (error instanceof InterpreterRuntimeError) {
@@ -37,15 +45,11 @@ export const normalizeError = (error: unknown): Diagnostic => {
       message = "a non-data value"
     } else if (typeof value === "string") {
       message = value
-    } else if (
-      value !== null &&
-      typeof value === "object" &&
-      typeof (value as { message?: unknown }).message === "string"
-    ) {
-      message = (value as { message: string }).message
+    } else if (value instanceof ProgramObject && typeof get(value, "message") === "string") {
+      message = get(value, "message") as string
     } else {
       try {
-        message = JSON.stringify(copyOut(value, "json")) ?? String(value)
+        message = JSON.stringify(toData(value, "Thrown value")) ?? String(value)
       } catch {
         message = String(value)
       }
@@ -80,14 +84,14 @@ export const caughtErrorValue = (thrown: unknown): unknown => {
   return createErrorValue(name, normalizeError(thrown).message)
 }
 
-export const constructErrorValue = (name: string, args: Array<unknown>): SafeObject =>
+const constructErrorValue = (name: string, args: Array<unknown>): ProgramError =>
   createErrorValue(name, args[0] === undefined ? "" : coerceToString(args[0]))
 
-export const constructAggregateErrorValue = <R>(
-  runner: SyncIteratorRunner<R>,
+const constructAggregateErrorValue = <R>(
+  runner: Runner<R>,
   args: Array<unknown>,
   node: AstNode,
-): Effect.Effect<SafeObject, unknown, R> =>
+): Effect.Effect<ProgramError, unknown, R> =>
   Effect.gen(function* () {
     const cursor = yield* runner.syncIterator(args[0], node)
     if (cursor === undefined) {
@@ -104,3 +108,20 @@ export const constructAggregateErrorValue = <R>(
       errors.push(step.value)
     }
   })
+
+/** An error constructor such as `Error` or `TypeError`; callable with or without `new`, like JS. */
+export const errorGlobal = <R>(name: string, runner: Runner<R>) => {
+  const construct: HostCall<R> = (args, node) =>
+    name === "AggregateError"
+      ? constructAggregateErrorValue(runner, args, node)
+      : Effect.sync(() => constructErrorValue(name, args))
+  return new HostFunction<R>({
+    name,
+    call: construct,
+    construct,
+    instanceOf: (value) => {
+      const brand = errorBrandName(value)
+      return brand !== undefined && (name === "Error" || brand === name)
+    },
+  })
+}

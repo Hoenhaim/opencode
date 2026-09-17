@@ -1,6 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node"
-import { Flock } from "@opencode-ai/util/flock"
-import { Global } from "@opencode-ai/util/global"
+import { Flock } from "@opencode/util/flock"
+import { Global } from "@opencode/util/global"
 import { Effect, FileSystem, Option, Schema } from "effect"
 import { expect, test } from "bun:test"
 import { parse } from "jsonc-parser"
@@ -423,24 +423,24 @@ test("updates effective duplicate canonical keybinds", async () => {
   const file = path.join(directory.path, "cli.json")
   await Bun.write(
     file,
-    `{"keybinds":{"session.delete":"first","session.delete":"last","permission.mode":"off","permission.mode":"on"}}`,
+    `{"keybinds":{"session.delete":"first","session.delete":"last","opencode.settings":"off","opencode.settings":"on"}}`,
   )
 
   const config = await run(
     directory.path,
     Effect.gen(function* () {
       const service = yield* Config.Service
-      expect((yield* service.get()).keybinds).toEqual({ "session.delete": "last", "permission.mode": "on" })
+      expect((yield* service.get()).keybinds).toEqual({ "session.delete": "last", "opencode.settings": "on" })
       return yield* service.update((draft) => {
-        draft.keybinds = { ...draft.keybinds, "session.delete": "changed", "permission.mode": "changed" }
+        draft.keybinds = { ...draft.keybinds, "session.delete": "changed", "opencode.settings": "changed" }
       })
     }),
   )
 
-  expect(config.keybinds).toEqual({ "session.delete": "changed", "permission.mode": "changed" })
+  expect(config.keybinds).toEqual({ "session.delete": "changed", "opencode.settings": "changed" })
   expect(parse(await Bun.file(file).text()).keybinds).toEqual({
     "session.delete": "changed",
-    "permission.mode": "changed",
+    "opencode.settings": "changed",
   })
 })
 
